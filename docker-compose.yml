@@ -1,0 +1,63 @@
+services:
+  backend:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/imagesearch
+      - SEARCH_PROVIDER=${SEARCH_PROVIDER:-brave}
+      - BRAVE_API_KEY=${BRAVE_API_KEY}
+      - BRAVE_COUNT=${BRAVE_COUNT:-5}
+      - BRAVE_SAFESEARCH=${BRAVE_SAFESEARCH:-off}
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_CSE_CX=${GOOGLE_CSE_CX}
+      - STORAGE_PATH=/data/images
+      - MAX_FILE_SIZE_MB=10
+      - DOWNLOAD_TIMEOUT=30
+      - MAX_CONCURRENT_DOWNLOADS=5
+      - MAX_RETRIES=3
+      - RETRY_BACKOFF_BASE=2
+      - LOG_LEVEL=INFO
+    volumes:
+      - image_data:/data/images
+      - ./apps/backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./apps/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  db:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=imagesearch
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  image_data:
+  postgres_data:
