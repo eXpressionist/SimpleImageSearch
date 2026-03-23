@@ -8,11 +8,13 @@ import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import TablePagination from '@mui/material/TablePagination';
 import MenuItem from '@mui/material/MenuItem';
+import Skeleton from '@mui/material/Skeleton';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { useBatch, useBatchStats } from '@/hooks/useBatches';
 import { useBatchItems } from '@/hooks/useBatchItems';
 import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
 import { ItemTable } from '@/components/item/ItemTable';
+import { ItemGallery } from '@/components/item/ItemGallery';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import type { ItemStatus } from '@/types/api';
 
@@ -22,6 +24,7 @@ export function BatchDetailPage() {
   const [status, setStatus] = useState<ItemStatus | ''>('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [viewMode, setViewMode] = useState<'table' | 'gallery'>('gallery');
 
   const { data: batch, isLoading: batchLoading } = useBatch(id!);
   const { data: stats } = useBatchStats(id!);
@@ -31,6 +34,8 @@ export function BatchDetailPage() {
     rowsPerPage,
     status || undefined
   );
+
+  const isProcessing = stats && (stats.pending > 0 || stats.searching > 0 || stats.downloading > 0);
 
   if (batchLoading) {
     return (
@@ -62,12 +67,33 @@ export function BatchDetailPage() {
             {batch.name}
           </Typography>
         </Box>
+        
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button 
+            variant={viewMode === 'gallery' ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setViewMode('gallery')}
+          >
+            Gallery
+          </Button>
+          <Button 
+            variant={viewMode === 'table' ? 'contained' : 'outlined'}
+            size="small"
+            onClick={() => setViewMode('table')}
+          >
+            Table
+          </Button>
+        </Box>
       </Box>
 
       {stats && (
         <Paper sx={{ p: 2, mb: 3 }}>
           <BatchProgressBar stats={stats} total={batch.total_items} />
         </Paper>
+      )}
+
+      {isProcessing && itemsData?.items && (
+        <ProcessingIndicator items={itemsData.items} />
       )}
 
       <Paper sx={{ p: 2, mb: 2 }}>
@@ -93,13 +119,21 @@ export function BatchDetailPage() {
 
       <ErrorAlert error={itemsError as Error | null} />
 
-      {itemsLoading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-          <CircularProgress />
+      {itemsLoading && !itemsData ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} variant="rounded" height={80} />
+          ))}
         </Box>
       ) : (
         <Paper>
-          <ItemTable items={itemsData?.items || []} />
+          {viewMode === 'gallery' ? (
+            <Box sx={{ p: 1 }}>
+              <ItemGallery items={itemsData?.items || []} />
+            </Box>
+          ) : (
+            <ItemTable items={itemsData?.items || []} />
+          )}
           <TablePagination
             component="div"
             count={itemsData?.total || 0}
@@ -114,5 +148,78 @@ export function BatchDetailPage() {
         </Paper>
       )}
     </Box>
+  );
+}
+
+import type { ItemWithImageResponse } from '@/types/api';
+
+function ProcessingIndicator({ items }: { items: ItemWithImageResponse[] }) {
+  const processingItems = items.filter(
+    item => item.status === 'searching' || item.status === 'downloading'
+  );
+  
+  if (processingItems.length === 0) return null;
+  
+  return (
+    <Paper 
+      sx={{ 
+        p: 1.5, 
+        mb: 2, 
+        bgcolor: 'info.lighter',
+        border: '1px solid',
+        borderColor: 'info.light',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 2,
+        flexWrap: 'wrap',
+      }}
+    >
+      <Box 
+        sx={{ 
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          animation: 'pulse 1s ease-in-out infinite',
+          '@keyframes pulse': {
+            '0%, 100%': { opacity: 1 },
+            '50%': { opacity: 0.5 },
+          },
+        }}
+      >
+        <CircularProgress size={16} />
+        <Typography variant="body2" color="info.dark" sx={{ fontWeight: 'medium' }}>
+          Now processing:
+        </Typography>
+      </Box>
+      
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        {processingItems.slice(0, 5).map(item => (
+          <Box 
+            key={item.id}
+            sx={{ 
+              px: 1, 
+              py: 0.5, 
+              borderRadius: 1, 
+              bgcolor: 'white',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+            }}
+          >
+            <Typography variant="caption" color="text.secondary">
+              {item.position + 1}.
+            </Typography>
+            <Typography variant="caption" sx={{ maxWidth: 150 }} noWrap>
+              {item.original_query}
+            </Typography>
+          </Box>
+        ))}
+        {processingItems.length > 5 && (
+          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+            +{processingItems.length - 5} more
+          </Typography>
+        )}
+      </Box>
+    </Paper>
   );
 }

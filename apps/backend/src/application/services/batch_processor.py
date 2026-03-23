@@ -59,7 +59,6 @@ async def process_batch_background(batch_id: UUID) -> None:
             )
 
             await processor.process_batch(batch_id)
-            await session.commit()
 
             logger.info(f"BACKGROUND TASK COMPLETE: Batch {batch_id}")
         except Exception as e:
@@ -141,6 +140,7 @@ class BatchProcessor:
 
         batch.mark_processing()
         await self.batch_repo.update(batch)
+        await self.session.commit()
 
         tasks = []
         while True:
@@ -159,6 +159,7 @@ class BatchProcessor:
         if batch:
             batch.mark_completed()
             await self.batch_repo.update(batch)
+            await self.session.commit()
 
         logger.info(f"Batch completed: {batch_id}")
 
@@ -180,6 +181,7 @@ class BatchProcessor:
         try:
             item.mark_searching()
             await self.item_repo.update(item)
+            await self.session.commit()
 
             batch_config = batch.config if batch else {}
             search_config = self._build_search_config(item.normalized_query, batch_config)
@@ -190,13 +192,16 @@ class BatchProcessor:
             if not results:
                 item.mark_failed("No search results found")
                 await self.item_repo.update(item)
+                batch = await self.batch_repo.get_by_id(batch_id)
+                if batch:
+                    batch.increment_processed(failed=True)
+                    await self.batch_repo.update(batch)
                 await self._log(item_id, "search", "failed", "No results")
+                await self.session.commit()
                 return
 
-            # Save thumbnails as JSON instead of downloading
             thumbnails_data = []
             for idx, result in enumerate(results):
-                # Get file size via HEAD request
                 file_size = await get_file_size_from_url(result.direct_url)
                 if file_size is None:
                     file_size = result.file_size
@@ -214,7 +219,6 @@ class BatchProcessor:
                 thumbnails_data.append(thumbnail_info)
                 logger.info(f"Thumbnail {idx+1}: {result.direct_url[:50]}... ({result.width}x{result.height}, {file_size} bytes)")
 
-            # Save to image_assets table (we store one entry per item with thumbnails as JSON)
             image_asset = ImageAsset(
                 id=uuid4(),
                 item_id=item_id,
@@ -240,21 +244,29 @@ class BatchProcessor:
                 await self.batch_repo.update(batch)
 
             await self._log(item_id, "search", "success", f"Saved {len(thumbnails_data)} thumbnails")
+            await self.session.commit()
             logger.info(f"ITEM PROCESSED SUCCESSFULLY: {item_id} with {len(thumbnails_data)} thumbnails")
 
         except Exception as e:
             logger.error(f"Error processing item {item_id}: {e}")
             import traceback
             logger.error(traceback.format_exc())
-            item.mark_failed(str(e)[:500])
-            await self.item_repo.update(item)
+            
+            try:
+                item = await self.item_repo.get_by_id(item_id)
+                if item:
+                    item.mark_failed(str(e)[:500])
+                    await self.item_repo.update(item)
 
-            batch = await self.batch_repo.get_by_id(batch_id)
-            if batch:
-                batch.increment_processed(failed=True)
-                await self.batch_repo.update(batch)
+                    batch = await self.batch_repo.get_by_id(batch_id)
+                    if batch:
+                        batch.increment_processed(failed=True)
+                        await self.batch_repo.update(batch)
 
-            await self._log(item_id, "process", "error", str(e))
+                    await self._log(item_id, "process", "error", str(e))
+                    await self.session.commit()
+            except Exception as commit_error:
+                logger.error(f"Failed to commit error state: {commit_error}")
 
     def _build_search_config(self, query: str, config: dict) -> SearchConfig:
         return SearchConfig(

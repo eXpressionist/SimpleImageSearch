@@ -14,10 +14,10 @@ export function useBatchItems(
     enabled: !!batchId,
     refetchInterval: (query) => {
       const data = query.state.data as ItemListResponse | undefined;
-      const hasPending = data?.items.some(
+      const hasProcessing = data?.items.some(
         (item) => ['pending', 'searching', 'downloading'].includes(item.status)
       );
-      return hasPending ? 3000 : false;
+      return hasProcessing ? 1000 : false;
     },
   });
 }

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { batchesApi } from '@/api/batches';
-import type { BatchCreateRequest } from '@/types/api';
+import type { BatchCreateRequest, BatchStatsResponse } from '@/types/api';
 
 export function useBatches(page = 1, pageSize = 20, status?: string) {
   return useQuery({
@@ -22,7 +22,11 @@ export function useBatchStats(id: string) {
     queryKey: ['batchStats', id],
     queryFn: () => batchesApi.getStats(id),
     enabled: !!id,
-    refetchInterval: 5000,
+    refetchInterval: (query) => {
+      const data = query.state.data as BatchStatsResponse | undefined;
+      const isProcessing = data && (data.pending > 0 || data.searching > 0 || data.downloading > 0);
+      return isProcessing ? 1000 : 5000;
+    },
   });
 }
 
