@@ -26,13 +26,24 @@ logger = logging.getLogger(__name__)
 async def get_file_size_from_url(url: str) -> int | None:
     """Get file size from URL using HEAD request."""
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
             response = await client.head(url)
             content_length = response.headers.get("content-length")
             if content_length:
                 return int(content_length)
     except Exception as e:
-        logger.warning(f"Failed to get file size for {url[:50]}...: {e}")
+        logger.debug(f"Failed to get file size for {url[:50]}...: {e}")
+    return None
+
+
+async def get_file_size_safe(url: str) -> int | None:
+    """Get file size without blocking - returns None on any error."""
+    try:
+        return await asyncio.wait_for(get_file_size_from_url(url), timeout=6.0)
+    except asyncio.TimeoutError:
+        logger.debug(f"Timeout getting file size for {url[:50]}...")
+    except Exception as e:
+        logger.debug(f"Error getting file size: {e}")
     return None
 
 
@@ -186,7 +197,24 @@ class BatchProcessor:
             batch_config = batch.config if batch else {}
             search_config = self._build_search_config(item.normalized_query, batch_config)
             logger.info(f"Searching for: {search_config.query}, images_per_query={search_config.images_per_query}")
-            results = await self.search_provider.search(search_config)
+            
+            try:
+                results = await asyncio.wait_for(
+                    self.search_provider.search(search_config),
+                    timeout=90.0
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"Search timeout for item {item_id}")
+                item.mark_failed("Search timeout (90s)")
+                await self.item_repo.update(item)
+                batch = await self.batch_repo.get_by_id(batch_id)
+                if batch:
+                    batch.increment_processed(failed=True)
+                    await self.batch_repo.update(batch)
+                await self._log(item_id, "search", "timeout", "Search exceeded 90s timeout")
+                await self.session.commit()
+                return
+            
             logger.info(f"Search returned {len(results)} results")
 
             if not results:
@@ -201,10 +229,16 @@ class BatchProcessor:
                 return
 
             thumbnails_data = []
+            max_file_size_checks = 30
             for idx, result in enumerate(results):
-                file_size = await get_file_size_from_url(result.direct_url)
-                if file_size is None:
-                    file_size = result.file_size
+                file_size = result.file_size
+                if idx < max_file_size_checks:
+                    try:
+                        size = await get_file_size_safe(result.direct_url)
+                        if size is not None:
+                            file_size = size
+                    except Exception as e:
+                        logger.debug(f"Skipping file size check for thumbnail {idx}: {e}")
 
                 thumbnail_info = {
                     "position": idx,
@@ -217,7 +251,8 @@ class BatchProcessor:
                     "file_size": file_size,
                 }
                 thumbnails_data.append(thumbnail_info)
-                logger.info(f"Thumbnail {idx+1}: {result.direct_url[:50]}... ({result.width}x{result.height}, {file_size} bytes)")
+            
+            logger.info(f"Collected {len(thumbnails_data)} thumbnails")
 
             image_asset = ImageAsset(
                 id=uuid4(),

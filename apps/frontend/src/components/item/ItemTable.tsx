@@ -107,6 +107,8 @@ export function ItemTable({ items }: ItemTableProps) {
                             fontSize: 9,
                             px: 0.5,
                             py: 0.25,
+                            zIndex: 1,
+                            pointerEvents: 'none',
                           }}
                         >
                           {thumb.width}x{thumb.height}

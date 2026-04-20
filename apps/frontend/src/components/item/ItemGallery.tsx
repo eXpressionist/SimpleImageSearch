@@ -59,8 +59,8 @@ export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
                     key={idx}
                     sx={{
                       position: 'relative',
-                      width: 70,
-                      height: 60,
+                      width: 102,
+                      height: 90,
                       borderRadius: 0.5,
                       overflow: 'hidden',
                       border: '1px solid #ddd',
@@ -73,7 +73,7 @@ export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
                       alt={thumb.title || `Thumb ${idx + 1}`}
                       sx={{
                         width: '100%',
-                        height: 50,
+                        height: 75,
                         objectFit: 'cover',
                         display: 'block',
                       }}
@@ -85,17 +85,18 @@ export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
                       onClick={(e) => e.stopPropagation()}
                       sx={{
                         position: 'absolute',
-                        bottom: 0,
-                        right: 0,
-                        p: 0.1,
-                        height: 20,
-                        width: 20,
-                        bgcolor: 'rgba(0,0,0,0.6)',
+                        top: 2,
+                        right: 2,
+                        p: '2px',
+                        minHeight: 18,
+                        minWidth: 18,
+                        bgcolor: 'rgba(0,0,0,0.7)',
                         color: 'white',
-                        '&:hover': { bgcolor: 'rgba(0,0,0,0.8)' },
+                        borderRadius: 0.5,
+                        '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
                       }}
                     >
-                      <OpenInNewIcon sx={{ fontSize: 10 }} />
+                      <OpenInNewIcon sx={{ fontSize: 12 }} />
                     </IconButton>
                     <Typography
                       variant="caption"
@@ -103,6 +104,7 @@ export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
                         position: 'absolute',
                         bottom: 0,
                         left: 0,
+                        right: 0,
                         bgcolor: 'rgba(0,0,0,0.7)',
                         color: 'white',
                         fontSize: 8,

@@ -10,8 +10,10 @@ import TablePagination from '@mui/material/TablePagination';
 import MenuItem from '@mui/material/MenuItem';
 import Skeleton from '@mui/material/Skeleton';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { useBatch, useBatchStats } from '@/hooks/useBatches';
 import { useBatchItems } from '@/hooks/useBatchItems';
+import { itemsApi } from '@/api/items';
 import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
 import { ItemTable } from '@/components/item/ItemTable';
 import { ItemGallery } from '@/components/item/ItemGallery';
@@ -25,6 +27,7 @@ export function BatchDetailPage() {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [viewMode, setViewMode] = useState<'table' | 'gallery'>('gallery');
+  const [recovering, setRecovering] = useState(false);
 
   const { data: batch, isLoading: batchLoading } = useBatch(id!);
   const { data: stats } = useBatchStats(id!);
@@ -36,6 +39,19 @@ export function BatchDetailPage() {
   );
 
   const isProcessing = stats && (stats.pending > 0 || stats.searching > 0 || stats.downloading > 0);
+  const hasStuckItems = stats && (stats.searching > 0 || stats.downloading > 0);
+
+  const handleRecoverStuck = async () => {
+    if (!id) return;
+    setRecovering(true);
+    try {
+      await itemsApi.recoverStuck(id, 2);
+    } catch (e) {
+      console.error('Failed to recover stuck items:', e);
+    } finally {
+      setRecovering(false);
+    }
+  };
 
   if (batchLoading) {
     return (
@@ -68,7 +84,19 @@ export function BatchDetailPage() {
           </Typography>
         </Box>
         
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          {hasStuckItems && (
+            <Button 
+              variant="outlined"
+              color="warning"
+              size="small"
+              startIcon={recovering ? <CircularProgress size={16} /> : <RefreshIcon />}
+              onClick={handleRecoverStuck}
+              disabled={recovering}
+            >
+              Recover Stuck
+            </Button>
+          )}
           <Button 
             variant={viewMode === 'gallery' ? 'contained' : 'outlined'}
             size="small"

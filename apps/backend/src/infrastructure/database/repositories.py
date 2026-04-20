@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List
 from uuid import UUID
 from sqlalchemy import select, update, func
@@ -182,6 +182,39 @@ class ItemRepository:
             item.increment_retry()
             return await self.update(item)
         return None
+    
+    async def get_stuck_items(
+        self, 
+        batch_id: Optional[UUID] = None,
+        stuck_minutes: int = 5,
+        limit: int = 100
+    ) -> List[BatchItem]:
+        cutoff_time = datetime.utcnow() - timedelta(minutes=stuck_minutes)
+        query = (
+            select(BatchItemModel)
+            .where(BatchItemModel.status.in_([ItemStatus.SEARCHING, ItemStatus.DOWNLOADING]))
+            .where(BatchItemModel.updated_at < cutoff_time)
+            .order_by(BatchItemModel.updated_at)
+            .limit(limit)
+        )
+        if batch_id:
+            query = query.where(BatchItemModel.batch_id == batch_id)
+        result = await self.session.execute(query)
+        return [self._to_entity(m) for m in result.scalars().all()]
+    
+    async def recover_stuck_items(
+        self,
+        batch_id: Optional[UUID] = None,
+        stuck_minutes: int = 5
+    ) -> int:
+        stuck_items = await self.get_stuck_items(batch_id, stuck_minutes)
+        recovered_count = 0
+        for item in stuck_items:
+            item.status = ItemStatus.PENDING
+            item.error_message = f"Auto-recovered from {item.status.value} state"
+            await self.update(item)
+            recovered_count += 1
+        return recovered_count
     
     @staticmethod
     def _to_entity(model: BatchItemModel) -> BatchItem:

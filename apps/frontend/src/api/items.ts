@@ -23,4 +23,11 @@ export const itemsApi = {
   
   approve: (id: string) =>
     api.post<ItemResponse>(`/items/${id}/approve`),
+  
+  recoverStuck: (batchId?: string, stuckMinutes: number = 5) => {
+    const searchParams = new URLSearchParams();
+    if (batchId) searchParams.set('batch_id', batchId);
+    searchParams.set('stuck_minutes', String(stuckMinutes));
+    return api.post<{ recovered_count: number; message: string }>(`/items/recover-stuck?${searchParams.toString()}`);
+  },
 };
