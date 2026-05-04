@@ -1,14 +1,11 @@
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import type { ItemWithImageResponse, ThumbnailInfo } from '@/types/api';
 import { StatusBadge } from '@/components/common/StatusBadge';
+import { CopyableText } from '@/components/common/CopyableText';
+import type { ItemWithImageResponse, ThumbnailInfo } from '@/types/api';
 
 function getThumbnails(item: ItemWithImageResponse): ThumbnailInfo[] {
   if (!item.image?.direct_url) return [];
   try {
-    return JSON.parse(item.image.direct_url);
+    return JSON.parse(item.image.direct_url) as ThumbnailInfo[];
   } catch {
     return [];
   }
@@ -16,8 +13,7 @@ function getThumbnails(item: ItemWithImageResponse): ThumbnailInfo[] {
 
 function formatFileSize(bytes: number | null): string {
   if (!bytes) return '-';
-  const kb = Math.round(bytes / 1024);
-  return `${kb} KB`;
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 interface ItemGalleryProps {
@@ -27,104 +23,46 @@ interface ItemGalleryProps {
 
 export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <div className="item-list">
       {items.map((item) => {
         const thumbnails = getThumbnails(item);
         return (
-          <Box
+          <article
             key={item.id}
+            className={`item-row ${onItemClick ? 'is-clickable' : ''}`}
             onClick={() => onItemClick?.(item)}
-            sx={{
-              p: 1,
-              border: '1px solid #ddd',
-              borderRadius: 1,
-              cursor: onItemClick ? 'pointer' : 'default',
-              '&:hover': { bgcolor: 'action.hover' },
-            }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1, gap: 1 }}>
-              <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: 30 }}>
-                {item.position + 1}.
-              </Typography>
-              <Typography variant="body2" noWrap sx={{ flex: 1, maxWidth: 200 }}>
-                {item.original_query}
-              </Typography>
+            <div className="item-row__header">
+              <strong>{item.position + 1}.</strong>
+              <CopyableText text={item.original_query} className="item-query" />
               <StatusBadge status={item.status} />
-            </Box>
+            </div>
 
             {thumbnails.length > 0 ? (
-              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                {thumbnails.map((thumb, idx) => (
-                  <Box
-                    key={idx}
-                    sx={{
-                      position: 'relative',
-                      width: 102,
-                      height: 90,
-                      borderRadius: 0.5,
-                      overflow: 'hidden',
-                      border: '1px solid #ddd',
-                      flexShrink: 0,
-                    }}
+              <div className="thumb-strip">
+                {thumbnails.map((thumb, index) => (
+                  <a
+                    key={`${thumb.url}-${index}`}
+                    className="thumb-card thumb-card--compact"
+                    href={thumb.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(event) => event.stopPropagation()}
                   >
-                    <Box
-                      component="img"
-                      src={thumb.url}
-                      alt={thumb.title || `Thumb ${idx + 1}`}
-                      sx={{
-                        width: '100%',
-                        height: 75,
-                        objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                    <IconButton
-                      size="small"
-                      href={thumb.url}
-                      target="_blank"
-                      onClick={(e) => e.stopPropagation()}
-                      sx={{
-                        position: 'absolute',
-                        top: 2,
-                        right: 2,
-                        p: '2px',
-                        minHeight: 18,
-                        minWidth: 18,
-                        bgcolor: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        borderRadius: 0.5,
-                        '&:hover': { bgcolor: 'rgba(0,0,0,0.9)' },
-                      }}
-                    >
-                      <OpenInNewIcon sx={{ fontSize: 12 }} />
-                    </IconButton>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        bgcolor: 'rgba(0,0,0,0.7)',
-                        color: 'white',
-                        fontSize: 8,
-                        px: 0.25,
-                        lineHeight: 1,
-                      }}
-                    >
-                      {thumb.width}x{thumb.height} • {formatFileSize(thumb.file_size)} • {thumb.mime_type.split('/')[1]}
-                    </Typography>
-                  </Box>
+                    <img src={thumb.url} alt={thumb.title || `Thumb ${index + 1}`} loading="lazy" />
+                    <span>
+                      {thumb.width}x{thumb.height} · {formatFileSize(thumb.file_size)} ·{' '}
+                      {thumb.mime_type.split('/')[1]}
+                    </span>
+                  </a>
                 ))}
-              </Box>
+              </div>
             ) : (
-              <Typography variant="caption" color="text.secondary">
-                No thumbnails
-              </Typography>
+              <p className="caption">No thumbnails</p>
             )}
-          </Box>
+          </article>
         );
       })}
-    </Box>
+    </div>
   );
 }

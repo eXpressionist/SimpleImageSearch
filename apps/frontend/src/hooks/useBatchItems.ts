@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { itemsApi } from '@/api/items';
 import type { ItemStatus, ItemListResponse } from '@/types/api';
+import { useAsyncData, useMutation } from '@/hooks/useAsyncData';
 
 export function useBatchItems(
   batchId: string,
@@ -8,12 +9,15 @@ export function useBatchItems(
   pageSize = 50,
   status?: ItemStatus
 ) {
-  return useQuery({
-    queryKey: ['batchItems', batchId, page, pageSize, status],
-    queryFn: () => itemsApi.listByBatch(batchId, { page, page_size: pageSize, status }),
+  const loader = useCallback(
+    () => itemsApi.listByBatch(batchId, { page, page_size: pageSize, status }),
+    [batchId, page, pageSize, status]
+  );
+
+  return useAsyncData(loader, [loader], {
     enabled: !!batchId,
     refetchInterval: (query) => {
-      const data = query.state.data as ItemListResponse | undefined;
+      const data = query as ItemListResponse | undefined;
       const hasProcessing = data?.items.some(
         (item) => ['pending', 'searching', 'downloading'].includes(item.status)
       );
@@ -23,33 +27,15 @@ export function useBatchItems(
 }
 
 export function useItem(id: string) {
-  return useQuery({
-    queryKey: ['item', id],
-    queryFn: () => itemsApi.get(id),
-    enabled: !!id,
-  });
+  const loader = useCallback(() => itemsApi.get(id), [id]);
+
+  return useAsyncData(loader, [loader], { enabled: !!id });
 }
 
 export function useRetryItem() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (id: string) => itemsApi.retry(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['item', id] });
-      queryClient.invalidateQueries({ queryKey: ['batchItems'] });
-    },
-  });
+  return useMutation((id: string) => itemsApi.retry(id));
 }
 
 export function useApproveItem() {
-  const queryClient = useQueryClient();
-  
-  return useMutation({
-    mutationFn: (id: string) => itemsApi.approve(id),
-    onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['item', id] });
-      queryClient.invalidateQueries({ queryKey: ['batchItems'] });
-    },
-  });
+  return useMutation((id: string) => itemsApi.approve(id));
 }

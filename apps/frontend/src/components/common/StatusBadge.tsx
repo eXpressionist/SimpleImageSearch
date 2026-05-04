@@ -1,18 +1,4 @@
-import Chip from '@mui/material/Chip';
-import Box from '@mui/material/Box';
-import type { ItemStatus, BatchStatus } from '@/types/api';
-
-const statusColors: Record<string, 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning'> = {
-  pending: 'default',
-  searching: 'info',
-  downloading: 'info',
-  saved: 'success',
-  failed: 'error',
-  review_needed: 'warning',
-  processing: 'primary',
-  completed: 'success',
-  partial: 'warning',
-};
+import type { BatchStatus, ItemStatus } from '@/types/api';
 
 const statusLabels: Record<string, string> = {
   pending: 'Pending',
@@ -26,7 +12,7 @@ const statusLabels: Record<string, string> = {
   partial: 'Partial',
 };
 
-const processingStatuses = ['searching', 'downloading', 'pending'];
+const processingStatuses = ['searching', 'downloading', 'pending', 'processing'];
 
 interface StatusBadgeProps {
   status: ItemStatus | BatchStatus;
@@ -34,39 +20,11 @@ interface StatusBadgeProps {
 
 export function StatusBadge({ status }: StatusBadgeProps) {
   const isProcessing = processingStatuses.includes(status);
-  
+
   return (
-    <Chip
-      label={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-          {isProcessing && (
-            <Box
-              sx={{
-                width: 10,
-                height: 10,
-                borderRadius: '50%',
-                border: '2px solid currentColor',
-                borderTopColor: 'transparent',
-                animation: 'spin 1s linear infinite',
-                '@keyframes spin': {
-                  '0%': { transform: 'rotate(0deg)' },
-                  '100%': { transform: 'rotate(360deg)' },
-                },
-              }}
-            />
-          )}
-          {statusLabels[status] || status}
-        </Box>
-      }
-      color={statusColors[status] || 'default'}
-      size="small"
-      sx={isProcessing ? {
-        animation: 'pulse 1.5s ease-in-out infinite',
-        '@keyframes pulse': {
-          '0%, 100%': { opacity: 1 },
-          '50%': { opacity: 0.7 },
-        },
-      } : {}}
-    />
+    <span className={`status-badge status-badge--${status} ${isProcessing ? 'is-pulsing' : ''}`}>
+      {isProcessing && <span className="mini-spinner" aria-hidden="true" />}
+      {statusLabels[status] || status}
+    </span>
   );
 }

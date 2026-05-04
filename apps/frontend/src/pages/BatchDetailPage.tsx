@@ -1,24 +1,13 @@
 import { useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import Box from '@mui/material/Box';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import CircularProgress from '@mui/material/CircularProgress';
-import TablePagination from '@mui/material/TablePagination';
-import MenuItem from '@mui/material/MenuItem';
-import Skeleton from '@mui/material/Skeleton';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import RefreshIcon from '@mui/icons-material/Refresh';
+import { useNavigate, useParams } from 'react-router-dom';
+import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
+import { ErrorAlert } from '@/components/common/ErrorAlert';
+import { ItemGallery } from '@/components/item/ItemGallery';
+import { ItemTable } from '@/components/item/ItemTable';
+import { itemsApi } from '@/api/items';
 import { useBatch, useBatchStats } from '@/hooks/useBatches';
 import { useBatchItems } from '@/hooks/useBatchItems';
-import { itemsApi } from '@/api/items';
-import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
-import { ItemTable } from '@/components/item/ItemTable';
-import { ItemGallery } from '@/components/item/ItemGallery';
-import { ErrorAlert } from '@/components/common/ErrorAlert';
-import type { ItemStatus } from '@/types/api';
+import type { ItemStatus, ItemWithImageResponse } from '@/types/api';
 
 export function BatchDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -28,26 +17,30 @@ export function BatchDetailPage() {
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [viewMode, setViewMode] = useState<'table' | 'gallery'>('gallery');
   const [recovering, setRecovering] = useState(false);
+  const [recoverError, setRecoverError] = useState<Error | null>(null);
 
-  const { data: batch, isLoading: batchLoading } = useBatch(id!);
-  const { data: stats } = useBatchStats(id!);
-  const { data: itemsData, isLoading: itemsLoading, error: itemsError } = useBatchItems(
-    id!,
-    page + 1,
-    rowsPerPage,
-    status || undefined
-  );
+  const { data: batch, isLoading: batchLoading } = useBatch(id || '');
+  const { data: stats, refetch: refetchStats } = useBatchStats(id || '');
+  const {
+    data: itemsData,
+    isLoading: itemsLoading,
+    error: itemsError,
+    refetch: refetchItems,
+  } = useBatchItems(id || '', page + 1, rowsPerPage, status || undefined);
 
   const isProcessing = stats && (stats.pending > 0 || stats.searching > 0 || stats.downloading > 0);
   const hasStuckItems = stats && (stats.searching > 0 || stats.downloading > 0);
+  const totalPages = itemsData ? Math.max(1, Math.ceil(itemsData.total / rowsPerPage)) : 1;
 
   const handleRecoverStuck = async () => {
     if (!id) return;
     setRecovering(true);
+    setRecoverError(null);
     try {
       await itemsApi.recoverStuck(id, 2);
-    } catch (e) {
-      console.error('Failed to recover stuck items:', e);
+      await Promise.all([refetchItems(), refetchStats()]);
+    } catch (error) {
+      setRecoverError(error instanceof Error ? error : new Error('Failed to recover stuck items'));
     } finally {
       setRecovering(false);
     }
@@ -55,199 +48,174 @@ export function BatchDetailPage() {
 
   if (batchLoading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
+      <div className="center-panel">
+        <span className="spinner" />
+      </div>
     );
   }
 
   if (!batch) {
     return (
-      <Box>
+      <section className="page-stack">
         <ErrorAlert error={new Error('Batch not found')} />
-        <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')}>
+        <button className="button button--ghost" type="button" onClick={() => navigate('/')}>
           Back to batches
-        </Button>
-      </Box>
+        </button>
+      </section>
     );
   }
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Button startIcon={<ArrowBackIcon />} onClick={() => navigate('/')}>
+    <section className="page-stack">
+      <div className="detail-header">
+        <div className="detail-header__title">
+          <button className="button button--ghost" type="button" onClick={() => navigate('/')}>
             Back
-          </Button>
-          <Typography variant="h4" sx={{ mt: 1 }}>
-            {batch.name}
-          </Typography>
-        </Box>
-        
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          </button>
+          <h1>{batch.name}</h1>
+        </div>
+
+        <div className="toolbar">
           {hasStuckItems && (
-            <Button 
-              variant="outlined"
-              color="warning"
-              size="small"
-              startIcon={recovering ? <CircularProgress size={16} /> : <RefreshIcon />}
+            <button
+              className="button button--warning"
+              type="button"
               onClick={handleRecoverStuck}
               disabled={recovering}
             >
-              Recover Stuck
-            </Button>
+              {recovering ? 'Recovering...' : 'Recover Stuck'}
+            </button>
           )}
-          <Button 
-            variant={viewMode === 'gallery' ? 'contained' : 'outlined'}
-            size="small"
+          <button
+            className={`button ${viewMode === 'gallery' ? 'button--primary' : 'button--ghost'}`}
+            type="button"
             onClick={() => setViewMode('gallery')}
           >
             Gallery
-          </Button>
-          <Button 
-            variant={viewMode === 'table' ? 'contained' : 'outlined'}
-            size="small"
+          </button>
+          <button
+            className={`button ${viewMode === 'table' ? 'button--primary' : 'button--ghost'}`}
+            type="button"
             onClick={() => setViewMode('table')}
           >
             Table
-          </Button>
-        </Box>
-      </Box>
+          </button>
+        </div>
+      </div>
 
       {stats && (
-        <Paper sx={{ p: 2, mb: 3 }}>
+        <div className="card">
           <BatchProgressBar stats={stats} total={batch.total_items} />
-        </Paper>
+        </div>
       )}
 
-      {isProcessing && itemsData?.items && (
-        <ProcessingIndicator items={itemsData.items} />
-      )}
+      {isProcessing && itemsData?.items && <ProcessingIndicator items={itemsData.items} />}
 
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            select
-            label="Filter by status"
+      <div className="card filter-card">
+        <label className="field field--inline">
+          <span>Filter by status</span>
+          <select
             value={status}
-            onChange={(e) => setStatus(e.target.value as ItemStatus | '')}
-            size="small"
-            sx={{ minWidth: 150 }}
+            onChange={(event) => {
+              setStatus(event.target.value as ItemStatus | '');
+              setPage(0);
+            }}
           >
-            <MenuItem value="">All</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="searching">Searching</MenuItem>
-            <MenuItem value="downloading">Downloading</MenuItem>
-            <MenuItem value="saved">Saved</MenuItem>
-            <MenuItem value="failed">Failed</MenuItem>
-            <MenuItem value="review_needed">Review Needed</MenuItem>
-          </TextField>
-        </Box>
-      </Paper>
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="searching">Searching</option>
+            <option value="downloading">Downloading</option>
+            <option value="saved">Saved</option>
+            <option value="failed">Failed</option>
+            <option value="review_needed">Review Needed</option>
+          </select>
+        </label>
+      </div>
 
-      <ErrorAlert error={itemsError as Error | null} />
+      <ErrorAlert error={itemsError} />
+      <ErrorAlert error={recoverError} onClose={() => setRecoverError(null)} />
 
       {itemsLoading && !itemsData ? (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {[...Array(5)].map((_, i) => (
-            <Skeleton key={i} variant="rounded" height={80} />
+        <div className="skeleton-stack">
+          {[0, 1, 2, 3, 4].map((item) => (
+            <div className="skeleton-row" key={item} />
           ))}
-        </Box>
+        </div>
       ) : (
-        <Paper>
+        <div className="card result-card">
           {viewMode === 'gallery' ? (
-            <Box sx={{ p: 1 }}>
-              <ItemGallery items={itemsData?.items || []} />
-            </Box>
+            <ItemGallery items={itemsData?.items || []} />
           ) : (
             <ItemTable items={itemsData?.items || []} />
           )}
-          <TablePagination
-            component="div"
-            count={itemsData?.total || 0}
-            page={page}
-            onPageChange={(_, newPage) => setPage(newPage)}
-            rowsPerPage={rowsPerPage}
-            onRowsPerPageChange={(e) => {
-              setRowsPerPage(parseInt(e.target.value, 10));
-              setPage(0);
-            }}
-          />
-        </Paper>
+
+          <div className="pagination pagination--right">
+            <label className="field field--inline">
+              <span>Rows</span>
+              <select
+                value={rowsPerPage}
+                onChange={(event) => {
+                  setRowsPerPage(parseInt(event.target.value, 10));
+                  setPage(0);
+                }}
+              >
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            </label>
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={page === 0}
+              onClick={() => setPage((current) => Math.max(0, current - 1))}
+            >
+              Previous
+            </button>
+            <span className="muted">
+              Page {page + 1} of {totalPages}
+            </span>
+            <button
+              className="button button--ghost"
+              type="button"
+              disabled={page + 1 >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       )}
-    </Box>
+    </section>
   );
 }
 
-import type { ItemWithImageResponse } from '@/types/api';
-
 function ProcessingIndicator({ items }: { items: ItemWithImageResponse[] }) {
   const processingItems = items.filter(
-    item => item.status === 'searching' || item.status === 'downloading'
+    (item) => item.status === 'searching' || item.status === 'downloading'
   );
-  
+
   if (processingItems.length === 0) return null;
-  
+
   return (
-    <Paper 
-      sx={{ 
-        p: 1.5, 
-        mb: 2, 
-        bgcolor: 'info.lighter',
-        border: '1px solid',
-        borderColor: 'info.light',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 2,
-        flexWrap: 'wrap',
-      }}
-    >
-      <Box 
-        sx={{ 
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          animation: 'pulse 1s ease-in-out infinite',
-          '@keyframes pulse': {
-            '0%, 100%': { opacity: 1 },
-            '50%': { opacity: 0.5 },
-          },
-        }}
-      >
-        <CircularProgress size={16} />
-        <Typography variant="body2" color="info.dark" sx={{ fontWeight: 'medium' }}>
-          Now processing:
-        </Typography>
-      </Box>
-      
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        {processingItems.slice(0, 5).map(item => (
-          <Box 
-            key={item.id}
-            sx={{ 
-              px: 1, 
-              py: 0.5, 
-              borderRadius: 1, 
-              bgcolor: 'white',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-            }}
-          >
-            <Typography variant="caption" color="text.secondary">
-              {item.position + 1}.
-            </Typography>
-            <Typography variant="caption" sx={{ maxWidth: 150 }} noWrap>
-              {item.original_query}
-            </Typography>
-          </Box>
+    <div className="processing-panel">
+      <div className="processing-panel__label">
+        <span className="spinner spinner--small" />
+        <strong>Now processing:</strong>
+      </div>
+
+      <div className="processing-chip-list">
+        {processingItems.slice(0, 5).map((item) => (
+          <span className="processing-chip" key={item.id}>
+            <span>{item.position + 1}.</span>
+            <span>{item.original_query}</span>
+          </span>
         ))}
         {processingItems.length > 5 && (
-          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-            +{processingItems.length - 5} more
-          </Typography>
+          <span className="caption">+{processingItems.length - 5} more</span>
         )}
-      </Box>
-    </Paper>
+      </div>
+    </div>
   );
 }
