@@ -400,7 +400,7 @@ class OpenCartImageMatcher:
             confidence = float(value or 0.0)
         except (TypeError, ValueError):
             return None
-        if not math.isfinite(confidence):
+        if not math.isfinite(confidence) or confidence < 0.0 or confidence > 1.0:
             return None
         return confidence
 
