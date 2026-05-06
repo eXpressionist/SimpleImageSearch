@@ -279,7 +279,7 @@ class OpenCartImageMatcher:
         for row in llm_matches:
             product_id = row.get("product_id")
             filename = row.get("filename")
-            confidence = float(row.get("confidence", 0.0) or 0.0)
+            confidence = self._parse_confidence(row.get("confidence"))
             product = products_by_id.get(product_id)
 
             if product is None:
@@ -316,6 +316,15 @@ class OpenCartImageMatcher:
                         sku=product.sku,
                         filename=filename,
                         message="LLM reused a file",
+                    )
+                )
+            elif confidence is None:
+                report.conflicts.append(
+                    OpenCartMatchConflict(
+                        product_id=product.product_id,
+                        sku=product.sku,
+                        filename=filename,
+                        message="LLM confidence is invalid",
                     )
                 )
             elif confidence < settings.fuzzy_threshold:
@@ -380,7 +389,16 @@ class OpenCartImageMatcher:
         return windows_name.rsplit(".", 1)[0] if "." in windows_name else windows_name
 
     def _join_image_path(self, image_prefix: str, filename: str) -> str:
-        return f"{image_prefix.rstrip('/')}/{filename}"
+        prefix = image_prefix.rstrip("/")
+        if not prefix:
+            return filename
+        return f"{prefix}/{filename}"
+
+    def _parse_confidence(self, value: Any) -> float | None:
+        try:
+            return float(value or 0.0)
+        except (TypeError, ValueError):
+            return None
 
     def _extract_json_array(self, value: str) -> Any:
         start = value.find("[")

@@ -88,6 +88,20 @@ def test_generate_joins_prefix_without_trailing_slash():
     assert "UPDATE oc_product SET image = 'catalog/products/ABC001.jpg' WHERE product_id = 123;" in report.sql
 
 
+def test_generate_uses_filename_when_prefix_is_empty():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="123\tABC-001",
+        files_text="ABC001.jpg",
+        image_prefix="",
+        settings=OpenCartMatchSettings(use_openrouter=False),
+    )
+
+    assert report.matches[0].image_path == "ABC001.jpg"
+    assert "UPDATE oc_product SET image = 'ABC001.jpg' WHERE product_id = 123;" in report.sql
+
+
 def test_generate_uses_exact_match_when_source_keys_match():
     matcher = make_matcher()
 
@@ -155,6 +169,27 @@ def test_generate_applies_and_validates_llm_matches():
         (None, "valid-second.jpg", "LLM referenced unknown product_id"),
         (203, "valid-second.jpg", "LLM confidence below threshold"),
     }
+
+
+def test_generate_rejects_malformed_llm_confidence():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="200\tSUN-100",
+        files_text="moon-photo.jpg",
+        image_prefix="catalog/products/",
+        settings=OpenCartMatchSettings(use_openrouter=True, fuzzy_threshold=0.78),
+        llm_matches=[
+            {"product_id": 200, "filename": "moon-photo.jpg", "confidence": "high", "reason": "bad confidence"},
+        ],
+    )
+
+    assert report.matches == []
+    assert [(p.product_id, p.sku) for p in report.unmatched_products] == [(200, "SUN-100")]
+    assert report.unused_files == ["moon-photo.jpg"]
+    assert [(c.product_id, c.filename, c.message) for c in report.conflicts] == [
+        (200, "moon-photo.jpg", "LLM confidence is invalid"),
+    ]
 
 
 def test_generate_reports_unmatched_products_and_unused_files():
