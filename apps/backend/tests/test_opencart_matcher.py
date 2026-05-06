@@ -192,6 +192,32 @@ def test_generate_rejects_malformed_llm_confidence():
     ]
 
 
+def test_generate_rejects_non_finite_llm_confidence():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="200\tSUN-100\n201\tOAK-200",
+        files_text="moon-photo.jpg\nvalid-second.jpg",
+        image_prefix="catalog/products/",
+        settings=OpenCartMatchSettings(use_openrouter=True, fuzzy_threshold=0.78),
+        llm_matches=[
+            {"product_id": 200, "filename": "moon-photo.jpg", "confidence": "NaN"},
+            {"product_id": 201, "filename": "valid-second.jpg", "confidence": "Infinity"},
+        ],
+    )
+
+    assert report.matches == []
+    assert [(p.product_id, p.sku) for p in report.unmatched_products] == [
+        (200, "SUN-100"),
+        (201, "OAK-200"),
+    ]
+    assert report.unused_files == ["moon-photo.jpg", "valid-second.jpg"]
+    assert {(c.product_id, c.filename, c.message) for c in report.conflicts} == {
+        (200, "moon-photo.jpg", "LLM confidence is invalid"),
+        (201, "valid-second.jpg", "LLM confidence is invalid"),
+    }
+
+
 def test_generate_reports_unmatched_products_and_unused_files():
     matcher = make_matcher()
 

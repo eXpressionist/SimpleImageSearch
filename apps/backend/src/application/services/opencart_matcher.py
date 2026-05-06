@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from difflib import SequenceMatcher
 from pathlib import PurePosixPath, PureWindowsPath
@@ -396,9 +397,12 @@ class OpenCartImageMatcher:
 
     def _parse_confidence(self, value: Any) -> float | None:
         try:
-            return float(value or 0.0)
+            confidence = float(value or 0.0)
         except (TypeError, ValueError):
             return None
+        if not math.isfinite(confidence):
+            return None
+        return confidence
 
     def _extract_json_array(self, value: str) -> Any:
         start = value.find("[")
