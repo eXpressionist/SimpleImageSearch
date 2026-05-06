@@ -140,7 +140,10 @@ class OpenCartImageMatcher:
         return "\n".join(lines)
 
     def parse_llm_json(self, value: str) -> list[dict[str, Any]]:
-        parsed = json.loads(value)
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            parsed = self._extract_json_array(value)
         if isinstance(parsed, dict):
             parsed = parsed.get("matches", [])
         if not isinstance(parsed, list):
@@ -355,7 +358,7 @@ class OpenCartImageMatcher:
                 product_id=product.product_id,
                 sku=product.sku,
                 filename=filename,
-                image_path=f"{image_prefix}{filename}",
+                image_path=self._join_image_path(image_prefix, filename),
                 method=method,
                 confidence=confidence,
                 reason=reason,
@@ -375,6 +378,19 @@ class OpenCartImageMatcher:
         filename = PurePosixPath(normalized).name
         windows_name = PureWindowsPath(filename).name
         return windows_name.rsplit(".", 1)[0] if "." in windows_name else windows_name
+
+    def _join_image_path(self, image_prefix: str, filename: str) -> str:
+        return f"{image_prefix.rstrip('/')}/{filename}"
+
+    def _extract_json_array(self, value: str) -> Any:
+        start = value.find("[")
+        end = value.rfind("]")
+        if start == -1 or end == -1 or end < start:
+            return []
+        try:
+            return json.loads(value[start : end + 1])
+        except json.JSONDecodeError:
+            return []
 
     def _escape_sql(self, value: str) -> str:
         return value.replace("'", "''")

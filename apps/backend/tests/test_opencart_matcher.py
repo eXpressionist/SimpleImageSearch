@@ -74,6 +74,20 @@ def test_generate_prefers_normalized_one_to_one_matches():
     assert "UPDATE oc_product SET image = 'catalog/products/import/ABC001-main.jpg' WHERE product_id = 123;" in report.sql
 
 
+def test_generate_joins_prefix_without_trailing_slash():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="123\tABC-001",
+        files_text="ABC001.jpg",
+        image_prefix="catalog/products",
+        settings=OpenCartMatchSettings(use_openrouter=False),
+    )
+
+    assert report.matches[0].image_path == "catalog/products/ABC001.jpg"
+    assert "UPDATE oc_product SET image = 'catalog/products/ABC001.jpg' WHERE product_id = 123;" in report.sql
+
+
 def test_generate_uses_exact_match_when_source_keys_match():
     matcher = make_matcher()
 
@@ -194,3 +208,13 @@ def test_sql_includes_comment_update_and_escapes_single_quotes():
     assert "ABC001''s.jpg" in report.sql
     assert "catalog/products/ABC001's.jpg" not in report.sql
     assert report.sql.count("UPDATE oc_product SET image =") == 1
+
+
+def test_parse_llm_json_extracts_array_from_wrapped_response():
+    matcher = make_matcher()
+
+    result = matcher.parse_llm_json(
+        'Here are the matches:\n[{"product_id": 123, "filename": "ABC001.jpg", "confidence": 0.91}]\nDone.'
+    )
+
+    assert result == [{"product_id": 123, "filename": "ABC001.jpg", "confidence": 0.91}]
