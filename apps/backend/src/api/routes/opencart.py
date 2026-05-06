@@ -44,13 +44,20 @@ async def generate_image_matches(
         low_confidence_threshold=request.settings.low_confidence_threshold,
         ignore_service_words=request.settings.ignore_service_words,
     )
+    openrouter_api_key = request.openrouter_api_key.strip() if request.openrouter_api_key else ""
+    if settings.use_openrouter and not openrouter_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="openrouter_api_key is required when settings.use_openrouter is true",
+        )
+
     products, _parse_errors = matcher.parse_products(request.products_text)
     files = matcher.parse_files(request.files_text)
     llm_matches: list[dict[str, Any]] | None = None
-    used_openrouter = bool(settings.use_openrouter and request.openrouter_api_key)
+    used_openrouter = settings.use_openrouter
 
     if used_openrouter:
-        client = OpenRouterClient(api_key=request.openrouter_api_key)
+        client = OpenRouterClient(api_key=openrouter_api_key)
         content = await client.match_images(
             model=settings.model,
             products=[_product_to_dict(product) for product in products],

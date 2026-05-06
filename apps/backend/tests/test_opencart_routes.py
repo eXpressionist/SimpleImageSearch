@@ -88,6 +88,24 @@ async def test_generate_without_openrouter_persists_history_and_hides_api_key(cl
 
 
 @pytest.mark.asyncio()
+async def test_generate_with_openrouter_enabled_requires_api_key(client: AsyncClient):
+    response = await client.post(
+        "/api/opencart/image-matches/generate",
+        json={
+            "products_text": "123\tABC-001",
+            "files_text": "ABC001.jpg",
+            "image_prefix": "catalog/products",
+            "settings": {"use_openrouter": True},
+        },
+    )
+
+    assert response.status_code == 400
+    assert "openrouter_api_key" in response.json()["detail"]
+    assert "required" in response.json()["detail"].lower()
+    assert InMemoryOpenCartImageMatchRunRepository.runs == []
+
+
+@pytest.mark.asyncio()
 async def test_history_list_and_detail_hide_openrouter_api_key(client: AsyncClient):
     generate_response = await client.post(
         "/api/opencart/image-matches/generate",
