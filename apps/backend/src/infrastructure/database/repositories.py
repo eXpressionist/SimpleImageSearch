@@ -4,8 +4,8 @@ from uuid import UUID
 from sqlalchemy import select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import BatchModel, BatchItemModel, ImageAssetModel, ProcessingLogModel
-from src.domain.entities import Batch, BatchItem, ImageAsset, ProcessingLog
+from .models import BatchModel, BatchItemModel, ImageAssetModel, OpenCartImageMatchRunModel, ProcessingLogModel
+from src.domain.entities import Batch, BatchItem, ImageAsset, OpenCartImageMatchRun, ProcessingLog
 from src.domain.value_objects import BatchStatus, ItemStatus
 
 
@@ -341,5 +341,72 @@ class LogRepository:
             status=model.status,
             message=model.message,
             details=model.details or {},
+            created_at=model.created_at,
+        )
+
+
+class OpenCartImageMatchRunRepository:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create(self, run: OpenCartImageMatchRun) -> OpenCartImageMatchRun:
+        model = OpenCartImageMatchRunModel(
+            id=run.id,
+            products_text=run.products_text,
+            files_text=run.files_text,
+            image_prefix=run.image_prefix,
+            settings=run.settings,
+            used_openrouter=run.used_openrouter,
+            model=run.model,
+            result=run.result,
+            sql=run.sql,
+            total_products=run.total_products,
+            total_files=run.total_files,
+            matched_count=run.matched_count,
+            unmatched_count=run.unmatched_count,
+            unused_file_count=run.unused_file_count,
+            created_at=run.created_at,
+        )
+        self.session.add(model)
+        await self.session.flush()
+        return self._to_entity(model)
+
+    async def get_by_id(self, run_id: UUID) -> Optional[OpenCartImageMatchRun]:
+        result = await self.session.execute(
+            select(OpenCartImageMatchRunModel).where(OpenCartImageMatchRunModel.id == run_id)
+        )
+        model = result.scalar_one_or_none()
+        return self._to_entity(model) if model else None
+
+    async def get_all(self, limit: int = 50, offset: int = 0) -> List[OpenCartImageMatchRun]:
+        result = await self.session.execute(
+            select(OpenCartImageMatchRunModel)
+            .order_by(OpenCartImageMatchRunModel.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        return [self._to_entity(model) for model in result.scalars().all()]
+
+    async def count(self) -> int:
+        result = await self.session.execute(select(func.count(OpenCartImageMatchRunModel.id)))
+        return result.scalar() or 0
+
+    @staticmethod
+    def _to_entity(model: OpenCartImageMatchRunModel) -> OpenCartImageMatchRun:
+        return OpenCartImageMatchRun(
+            id=model.id,
+            products_text=model.products_text,
+            files_text=model.files_text,
+            image_prefix=model.image_prefix,
+            settings=model.settings or {},
+            used_openrouter=model.used_openrouter,
+            model=model.model,
+            result=model.result or {},
+            sql=model.sql,
+            total_products=model.total_products,
+            total_files=model.total_files,
+            matched_count=model.matched_count,
+            unmatched_count=model.unmatched_count,
+            unused_file_count=model.unused_file_count,
             created_at=model.created_at,
         )

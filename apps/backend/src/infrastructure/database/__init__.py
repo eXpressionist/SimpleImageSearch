@@ -1,12 +1,13 @@
-from .models import Base, BatchModel, BatchItemModel, ImageAssetModel, ProcessingLogModel
+from .models import Base, BatchModel, BatchItemModel, ImageAssetModel, OpenCartImageMatchRunModel, ProcessingLogModel
 from .session import get_session, async_session_factory, engine
-from .repositories import BatchRepository, ItemRepository, ImageRepository, LogRepository
+from .repositories import BatchRepository, ItemRepository, ImageRepository, LogRepository, OpenCartImageMatchRunRepository
 
 __all__ = [
     "Base",
     "BatchModel",
     "BatchItemModel",
     "ImageAssetModel",
+    "OpenCartImageMatchRunModel",
     "ProcessingLogModel",
     "get_session",
     "async_session_factory",
@@ -15,4 +16,5 @@ __all__ = [
     "ItemRepository",
     "ImageRepository",
     "LogRepository",
+    "OpenCartImageMatchRunRepository",
 ]

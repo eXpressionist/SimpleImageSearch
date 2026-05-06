@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from src.api.routes import batches_router, items_router, images_router, health_router
+from src.api.routes import batches_router, items_router, images_router, health_router, opencart_router
 from src.infrastructure.database import engine
 from src.infrastructure.config import get_settings
 
@@ -50,6 +50,7 @@ app.include_router(health_router)
 app.include_router(batches_router, prefix="/api")
 app.include_router(items_router, prefix="/api")
 app.include_router(images_router, prefix="/api")
+app.include_router(opencart_router, prefix="/api")
 
 
 @app.get("/")

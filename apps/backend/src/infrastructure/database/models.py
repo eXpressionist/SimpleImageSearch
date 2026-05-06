@@ -90,3 +90,23 @@ class ProcessingLogModel(Base):
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     
     item = relationship("BatchItemModel", back_populates="logs")
+
+
+class OpenCartImageMatchRunModel(Base):
+    __tablename__ = "opencart_image_match_runs"
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    products_text = Column(Text, nullable=False)
+    files_text = Column(Text, nullable=False)
+    image_prefix = Column(String(500), nullable=False, default="")
+    settings = Column(JSON, nullable=False, default=dict)
+    used_openrouter = Column(Boolean, nullable=False, default=False)
+    model = Column(String(255), nullable=True)
+    result = Column(JSON, nullable=False, default=dict)
+    sql = Column(Text, nullable=False, default="")
+    total_products = Column(Integer, nullable=False, default=0)
+    total_files = Column(Integer, nullable=False, default=0)
+    matched_count = Column(Integer, nullable=False, default=0)
+    unmatched_count = Column(Integer, nullable=False, default=0)
+    unused_file_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
