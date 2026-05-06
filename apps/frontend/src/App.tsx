@@ -3,6 +3,7 @@ import { Layout } from '@/components/layout/Layout';
 import { BatchListPage } from '@/pages/BatchListPage';
 import { BatchImportPage } from '@/pages/BatchImportPage';
 import { BatchDetailPage } from '@/pages/BatchDetailPage';
+import { OpenCartSqlPage } from '@/pages/OpenCartSqlPage';
 import './styles.css';
 
 export function App() {
@@ -13,6 +14,7 @@ export function App() {
           <Route index element={<BatchListPage />} />
           <Route path="import" element={<BatchImportPage />} />
           <Route path="batches/:id" element={<BatchDetailPage />} />
+          <Route path="opencart-sql" element={<OpenCartSqlPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

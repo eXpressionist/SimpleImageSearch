@@ -26,6 +26,13 @@ export function Header() {
           >
             Import
           </button>
+          <button
+            className={`nav-button ${location.pathname === '/opencart-sql' ? 'is-active' : ''}`}
+            type="button"
+            onClick={() => navigate('/opencart-sql')}
+          >
+            OpenCart SQL
+          </button>
         </nav>
       </div>
     </header>

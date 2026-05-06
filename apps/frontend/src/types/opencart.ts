@@ -43,8 +43,7 @@ export interface OpenCartMatchConflict {
   message: string;
 }
 
-export interface OpenCartGenerateResponse {
-  history_id: string;
+export interface OpenCartMatchReport {
   matches: OpenCartImageMatch[];
   unmatched_products: OpenCartProduct[];
   unused_files: string[];
@@ -52,6 +51,10 @@ export interface OpenCartGenerateResponse {
   conflicts: OpenCartMatchConflict[];
   low_confidence_matches: OpenCartImageMatch[];
   sql: string;
+}
+
+export interface OpenCartGenerateResponse extends OpenCartMatchReport {
+  history_id: string;
 }
 
 export interface OpenCartHistorySummary {
@@ -78,6 +81,6 @@ export interface OpenCartHistoryDetail extends OpenCartHistorySummary {
   files_text: string;
   image_prefix: string;
   settings: OpenCartMatchSettings;
-  result: OpenCartGenerateResponse;
+  result: OpenCartMatchReport;
   sql: string;
 }

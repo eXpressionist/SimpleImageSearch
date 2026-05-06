@@ -867,6 +867,110 @@ h2 {
   white-space: nowrap;
 }
 
+.opencart-input-grid,
+.opencart-settings-grid,
+.opencart-report-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.opencart-input-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.opencart-settings-grid {
+  grid-template-columns: minmax(220px, 1.4fr) minmax(220px, 1fr) minmax(220px, 1fr);
+}
+
+.opencart-result {
+  padding: 1rem;
+}
+
+.opencart-result__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.sql-output {
+  max-height: 360px;
+  overflow: auto;
+  border-radius: 6px;
+  padding: 1rem;
+  background: #111827;
+  color: #f8fafc;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.opencart-table {
+  min-width: 900px;
+}
+
+.opencart-table td {
+  overflow-wrap: anywhere;
+}
+
+.opencart-report-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 1rem;
+}
+
+.opencart-report-list {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.75rem;
+  background: #f8fafc;
+}
+
+.opencart-report-list h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}
+
+.opencart-report-list ul {
+  display: grid;
+  gap: 0.35rem;
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
+}
+
+.opencart-report-list li {
+  overflow-wrap: anywhere;
+}
+
+.history-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.history-item {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(120px, 1fr));
+  gap: 0.75rem;
+  width: 100%;
+  border: 1px solid #dce4ef;
+  border-radius: 6px;
+  padding: 0.7rem;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.history-item:hover {
+  border-color: #93c5fd;
+  background: #f8fbff;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);
@@ -898,7 +1002,11 @@ h2 {
   }
 
   .form-grid,
-  .item-detail-grid {
+  .item-detail-grid,
+  .opencart-input-grid,
+  .opencart-settings-grid,
+  .opencart-report-grid,
+  .history-item {
     grid-template-columns: 1fr;
   }
 
