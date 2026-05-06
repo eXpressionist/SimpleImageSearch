@@ -10,6 +10,8 @@ from .opencart import (
     OpenCartImageMatchDTO,
     OpenCartMatchConflictDTO,
     OpenCartMatchSettingsDTO,
+    OpenRouterModelDTO,
+    OpenRouterModelListDTO,
     OpenCartParseErrorDTO,
     OpenCartProductDTO,
 )
@@ -31,6 +33,8 @@ __all__ = [
     "OpenCartImageMatchDTO",
     "OpenCartMatchConflictDTO",
     "OpenCartMatchSettingsDTO",
+    "OpenRouterModelDTO",
+    "OpenRouterModelListDTO",
     "OpenCartParseErrorDTO",
     "OpenCartProductDTO",
 ]

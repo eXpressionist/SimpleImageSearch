@@ -88,6 +88,36 @@ async def test_generate_without_openrouter_persists_history_and_hides_api_key(cl
 
 
 @pytest.mark.asyncio()
+async def test_openrouter_models_are_sorted_by_name(client: AsyncClient, monkeypatch):
+    import src.api.routes.opencart as opencart_routes
+
+    class FakeOpenRouterClient:
+        def __init__(self, api_key: str = "", timeout: int = 30):
+            self.api_key = api_key
+            self.timeout = timeout
+
+        async def list_models(self):
+            return [
+                {"id": "z-provider/zeta", "name": "Zeta", "context_length": 1000},
+                {"id": "a-provider/alpha-2", "name": "Alpha", "context_length": 2000},
+                {"id": "a-provider/alpha-1", "name": "Alpha", "context_length": 3000},
+                {"id": "missing-name/model"},
+            ]
+
+    monkeypatch.setattr(opencart_routes, "OpenRouterClient", FakeOpenRouterClient)
+
+    response = await client.get("/api/opencart/image-matches/openrouter/models")
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [
+        {"id": "a-provider/alpha-1", "name": "Alpha", "context_length": 3000},
+        {"id": "a-provider/alpha-2", "name": "Alpha", "context_length": 2000},
+        {"id": "missing-name/model", "name": "missing-name/model", "context_length": None},
+        {"id": "z-provider/zeta", "name": "Zeta", "context_length": 1000},
+    ]
+
+
+@pytest.mark.asyncio()
 async def test_generate_with_openrouter_enabled_requires_api_key(client: AsyncClient):
     response = await client.post(
         "/api/opencart/image-matches/generate",

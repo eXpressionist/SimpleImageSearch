@@ -21,6 +21,16 @@ class OpenCartGenerateRequestDTO(BaseModel):
     openrouter_api_key: str | None = None
 
 
+class OpenRouterModelDTO(BaseModel):
+    id: str
+    name: str
+    context_length: int | None = None
+
+
+class OpenRouterModelListDTO(BaseModel):
+    items: list[OpenRouterModelDTO]
+
+
 class OpenCartProductDTO(BaseModel):
     product_id: int
     sku: str

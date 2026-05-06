@@ -10,6 +10,7 @@ from src.application.dto import (
     OpenCartGenerateResponseDTO,
     OpenCartHistoryDetailDTO,
     OpenCartHistoryListDTO,
+    OpenRouterModelListDTO,
 )
 from src.application.services import OpenCartImageMatcher
 from src.domain.entities import (
@@ -25,6 +26,23 @@ from src.infrastructure.database import OpenCartImageMatchRunRepository
 from src.infrastructure.providers.openrouter import OpenRouterClient
 
 router = APIRouter(prefix="/opencart/image-matches", tags=["opencart"])
+
+
+@router.get("/openrouter/models", response_model=OpenRouterModelListDTO)
+async def list_openrouter_models() -> dict[str, Any]:
+    client = OpenRouterClient()
+    models = await client.list_models()
+    items = [
+        {
+            "id": str(model["id"]),
+            "name": str(model.get("name") or model["id"]),
+            "context_length": model.get("context_length"),
+        }
+        for model in models
+        if model.get("id")
+    ]
+    items.sort(key=lambda item: (item["name"].casefold(), item["id"].casefold()))
+    return {"items": items}
 
 
 @router.post(

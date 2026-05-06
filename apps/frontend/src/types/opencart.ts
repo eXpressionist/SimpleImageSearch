@@ -14,6 +14,16 @@ export interface OpenCartGenerateRequest {
   openrouter_api_key?: string;
 }
 
+export interface OpenRouterModel {
+  id: string;
+  name: string;
+  context_length: number | null;
+}
+
+export interface OpenRouterModelList {
+  items: OpenRouterModel[];
+}
+
 export interface OpenCartProduct {
   product_id: number;
   sku: string;

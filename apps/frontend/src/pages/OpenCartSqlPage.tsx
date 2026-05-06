@@ -6,6 +6,7 @@ import type {
   OpenCartHistorySummary,
   OpenCartMatchReport,
   OpenCartMatchSettings,
+  OpenRouterModel,
 } from '@/types/opencart';
 
 const defaultSettings: OpenCartMatchSettings = {
@@ -26,9 +27,12 @@ export function OpenCartSqlPage() {
   const [settings, setSettings] = useState<OpenCartMatchSettings>(defaultSettings);
   const [report, setReport] = useState<OpenCartMatchReport | null>(emptyReport);
   const [history, setHistory] = useState<OpenCartHistorySummary[]>([]);
+  const [models, setModels] = useState<OpenRouterModel[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<OpenCartHistoryDetail | null>(null);
   const [isWorking, setIsWorking] = useState(false);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const [modelLoadError, setModelLoadError] = useState<string | null>(null);
 
   const canGenerate = useMemo(() => {
     if (!productsText.trim() || !filesText.trim()) return false;
@@ -38,6 +42,7 @@ export function OpenCartSqlPage() {
 
   useEffect(() => {
     void refreshHistory();
+    void refreshModels();
   }, []);
 
   const currentSql = report?.sql ?? '';
@@ -48,6 +53,19 @@ export function OpenCartSqlPage() {
       setHistory(response.items);
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to load history'));
+    }
+  }
+
+  async function refreshModels() {
+    setIsLoadingModels(true);
+    setModelLoadError(null);
+    try {
+      const response = await opencartApi.getOpenRouterModels();
+      setModels(response.items);
+    } catch (err) {
+      setModelLoadError(err instanceof Error ? err.message : 'Failed to load OpenRouter models');
+    } finally {
+      setIsLoadingModels(false);
     }
   }
 
@@ -159,10 +177,37 @@ export function OpenCartSqlPage() {
           </label>
           <label className="field">
             Model
-            <input
-              value={settings.model}
-              onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}
-            />
+            {models.length > 0 ? (
+              <select
+                value={models.some((model) => model.id === settings.model) ? settings.model : '__custom__'}
+                onChange={(event) => {
+                  if (event.target.value !== '__custom__') {
+                    setSettings((current) => ({ ...current, model: event.target.value }));
+                  }
+                }}
+              >
+                {!models.some((model) => model.id === settings.model) && (
+                  <option value="__custom__">{settings.model}</option>
+                )}
+                {models.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.id})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={settings.model}
+                onChange={(event) => setSettings((current) => ({ ...current, model: event.target.value }))}
+              />
+            )}
+            <small>
+              {isLoadingModels
+                ? 'Loading OpenRouter models...'
+                : modelLoadError
+                  ? `Model list unavailable: ${modelLoadError}`
+                  : `${models.length} OpenRouter models loaded`}
+            </small>
           </label>
         </div>
 

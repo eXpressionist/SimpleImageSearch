@@ -4,6 +4,7 @@ import type {
   OpenCartGenerateResponse,
   OpenCartHistoryDetail,
   OpenCartHistoryList,
+  OpenRouterModelList,
 } from '@/types/opencart';
 
 export const opencartApi = {
@@ -17,4 +18,7 @@ export const opencartApi = {
 
   getHistoryDetail: (id: string) =>
     api.get<OpenCartHistoryDetail>(`/opencart/image-matches/history/${id}`),
+
+  getOpenRouterModels: () =>
+    api.get<OpenRouterModelList>('/opencart/image-matches/openrouter/models'),
 };

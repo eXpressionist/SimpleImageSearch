@@ -5,10 +5,11 @@ import httpx
 
 
 class OpenRouterClient:
-    def __init__(self, api_key: str, timeout: int = 30):
+    def __init__(self, api_key: str = "", timeout: int = 30):
         self.api_key = api_key
         self.timeout = timeout
         self.base_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.models_url = "https://openrouter.ai/api/v1/models"
 
     async def match_images(self, model: str, products: list[dict[str, Any]], files: list[str]) -> str:
         payload = {
@@ -41,3 +42,16 @@ class OpenRouterClient:
             data = response.json()
 
         return data["choices"][0]["message"]["content"]
+
+    async def list_models(self) -> list[dict[str, Any]]:
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            response = await client.get(self.models_url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+
+        models = data.get("data", [])
+        return [model for model in models if isinstance(model, dict)]
