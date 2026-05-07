@@ -640,8 +640,8 @@ h2 {
 .thumb-card {
   position: relative;
   display: block;
-  width: 120px;
-  height: 130px;
+  width: 126px;
+  height: 144px;
   overflow: hidden;
   border: 1px solid #dbe3ee;
   border-radius: 6px;
@@ -651,8 +651,8 @@ h2 {
 }
 
 .thumb-card--compact {
-  width: 102px;
-  height: 90px;
+  width: 112px;
+  height: 112px;
 }
 
 .thumb-card img {
@@ -663,7 +663,7 @@ h2 {
 }
 
 .thumb-card--compact img {
-  height: 75px;
+  height: 78px;
 }
 
 .thumb-card > span,
@@ -673,11 +673,8 @@ h2 {
   left: 0;
   right: 0;
   padding: 0.18rem 0.3rem;
-  overflow: hidden;
   font-size: 0.58rem;
   line-height: 1.15;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .thumb-card > span,
@@ -689,6 +686,20 @@ h2 {
 .thumb-card__top {
   top: 0;
   background: rgb(15 23 42 / 70%);
+}
+
+.thumb-card__meta,
+.thumb-card__bottom {
+  display: grid;
+  gap: 0.08rem;
+}
+
+.thumb-card__meta > span,
+.thumb-card__bottom > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .table-scroll {

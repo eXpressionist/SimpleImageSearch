@@ -16,6 +16,10 @@ function formatFileSize(bytes: number | null): string {
   return `${Math.round(bytes / 1024)} KB`;
 }
 
+function formatMime(mime: string): string {
+  return mime.split('/')[1]?.toUpperCase() || mime;
+}
+
 interface ItemGalleryProps {
   items: ItemWithImageResponse[];
   onItemClick?: (item: ItemWithImageResponse) => void;
@@ -50,9 +54,11 @@ export function ItemGallery({ items, onItemClick }: ItemGalleryProps) {
                     onClick={(event) => event.stopPropagation()}
                   >
                     <img src={thumb.url} alt={thumb.title || `Thumb ${index + 1}`} loading="lazy" />
-                    <span>
-                      {thumb.width}x{thumb.height} · {formatFileSize(thumb.file_size)} ·{' '}
-                      {thumb.mime_type.split('/')[1]}
+                    <span className="thumb-card__meta">
+                      <span>
+                        {thumb.width}x{thumb.height} · {formatFileSize(thumb.file_size)}
+                      </span>
+                      <span>{formatMime(thumb.mime_type)}</span>
                     </span>
                   </a>
                 ))}

@@ -63,7 +63,8 @@ export function ItemTable({ items }: ItemTableProps) {
                           <img src={thumb.url} alt={thumb.title || `Thumb ${index + 1}`} loading="lazy" />
                           <span className="thumb-card__top">{thumb.width}x{thumb.height}</span>
                           <span className="thumb-card__bottom">
-                            {formatFileSize(thumb.file_size)} · {formatMime(thumb.mime_type)}
+                            <span>{formatFileSize(thumb.file_size)}</span>
+                            <span>{formatMime(thumb.mime_type)}</span>
                           </span>
                         </a>
                       ))}
