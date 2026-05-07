@@ -56,15 +56,17 @@ export function BatchDetailPage() {
 
   const handleDownloadOriginals = async (event: React.FormEvent) => {
     event.preventDefault();
-    const targetDir = originalPath.trim();
-    if (!id || !targetDir) return;
+    const subfolder = originalPath.trim();
+    if (!id) return;
 
-    if (/^[A-Za-z]:[\\/]/.test(targetDir)) {
+    if (/^[A-Za-z]:[\\/]/.test(subfolder) || subfolder.startsWith('/')) {
       setDownloadError(
-        new Error('Docker backend cannot write to Windows paths directly. Mount the folder and use /exports.')
+        new Error('Enter a subfolder name only. Empty saves directly to /exports.')
       );
       return;
     }
+
+    const targetDir = buildExportsTargetDir(subfolder);
 
     setDownloadingOriginals(true);
     setDownloadError(null);
@@ -199,12 +201,11 @@ export function BatchDetailPage() {
           </label>
 
           <label className="field field--wide">
-            <span>Originals folder</span>
+            <span>Exports subfolder</span>
             <input
               value={originalPath}
               onChange={(event) => setOriginalPath(event.target.value)}
-              placeholder="/exports"
-              required
+              placeholder="Optional, for example batch-1"
             />
           </label>
         </div>
@@ -213,12 +214,12 @@ export function BatchDetailPage() {
           <button
             className="button button--primary"
             type="submit"
-            disabled={downloadingOriginals || isProcessing || !originalPath.trim()}
+            disabled={downloadingOriginals || isProcessing}
           >
             {downloadingOriginals ? 'Downloading...' : 'Download Originals'}
           </button>
           <span className="caption">
-            Use an absolute backend path, for example /exports in Docker.
+            Empty saves to /exports. Entering a name creates a subfolder inside /exports.
           </span>
         </div>
 
@@ -333,6 +334,16 @@ export function BatchDetailPage() {
       )}
     </section>
   );
+}
+
+function buildExportsTargetDir(subfolder: string): string {
+  const normalized = subfolder
+    .split(/[\\/]+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join('/');
+
+  return normalized ? `/exports/${normalized}` : '/exports';
 }
 
 function ProcessingIndicator({ items }: { items: ItemWithImageResponse[] }) {
