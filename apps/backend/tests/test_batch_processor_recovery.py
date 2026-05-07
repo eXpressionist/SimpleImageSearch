@@ -316,7 +316,13 @@ async def test_download_originals_for_batch_uses_item_names_in_one_directory():
         ("https://cdn.example.test/a.jpg", "C:/exports/images", "SKU_phone-1.jpg"),
         ("https://cdn.example.test/b.png", "C:/exports/images", "SKU_phone-2.png"),
     ]
-    assert result == {"total": 2, "downloaded": 2, "failed_downloads": 0, "skipped_items": 0}
+    assert result == {
+        "total": 2,
+        "downloaded": 2,
+        "failed_downloads": 0,
+        "failed_items": [],
+        "skipped_items": 0,
+    }
 
 
 @pytest.mark.asyncio
@@ -355,6 +361,61 @@ async def test_download_originals_for_batch_continues_after_forbidden_original()
         ("https://cdn.example.test/blocked.jpg", "C:/exports/images", "Camera_Lens-1.jpg"),
         ("https://cdn.example.test/ok.png", "C:/exports/images", "Camera_Lens-2.png"),
     ]
-    assert result == {"total": 2, "downloaded": 1, "failed_downloads": 1, "skipped_items": 0}
+    assert result == {
+        "total": 2,
+        "downloaded": 1,
+        "failed_downloads": 1,
+        "failed_items": [
+            {
+                "item_name": "Camera Lens",
+                "url": "https://cdn.example.test/blocked.jpg",
+                "error": "HTTP 403",
+            }
+        ],
+        "skipped_items": 0,
+    }
     assert progress_events[-1]["status"] == "running"
     assert progress_events[-1]["completed"] == 2
+    assert progress_events[-1]["failed_items"] == [
+        {
+            "item_name": "Camera Lens",
+            "url": "https://cdn.example.test/blocked.jpg",
+            "error": "HTTP 403",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_download_originals_for_batch_reports_current_item_before_download():
+    batch_id = uuid4()
+    item_id = uuid4()
+    batch = Batch(id=batch_id, name="originals", total_items=1)
+    item = BatchItem(
+        id=item_id,
+        batch_id=batch_id,
+        position=0,
+        original_query="Slow Item",
+        normalized_query="slow item",
+    )
+    processor = make_processor(batch, item)
+    processor.item_repo.batch_items = [item]
+    processor.image_repo.image = SimpleNamespace(
+        direct_url=json.dumps(
+            [
+                {"url": "https://cdn.example.test/slow.jpg", "mime_type": "image/jpeg"},
+            ]
+        )
+    )
+    progress_events = []
+    processor.downloader = FakeOriginalDownloader()
+
+    await processor.download_originals_for_batch(
+        batch_id,
+        count_per_item=1,
+        target_dir="C:/exports/images",
+        progress_callback=progress_events.append,
+    )
+
+    assert progress_events[1]["completed"] == 0
+    assert progress_events[1]["current_item"] == "Slow Item"
+    assert progress_events[1]["current_url"] == "https://cdn.example.test/slow.jpg"

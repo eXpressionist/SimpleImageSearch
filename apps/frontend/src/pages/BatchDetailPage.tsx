@@ -236,6 +236,19 @@ export function BatchDetailPage() {
               {downloadProgress.failed_downloads > 0 && ` · ${downloadProgress.failed_downloads} failed`}
               {downloadProgress.current_item && ` · ${downloadProgress.current_item}`}
             </p>
+            {downloadProgress.failed_items.length > 0 && (
+              <div className="failed-originals">
+                <strong>Failed SKU</strong>
+                <ul>
+                  {downloadProgress.failed_items.map((item) => (
+                    <li key={`${item.item_name}-${item.url}`}>
+                      <span>{item.item_name}</span>
+                      <span>{item.error}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
       </form>

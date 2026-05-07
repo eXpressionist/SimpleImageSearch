@@ -64,6 +64,11 @@ export interface BatchOriginalDownloadProgress {
   completed: number;
   downloaded: number;
   failed_downloads: number;
+  failed_items: Array<{
+    item_name: string;
+    url: string;
+    error: string;
+  }>;
   skipped_items: number;
   current_item: string | null;
   current_url: string | null;

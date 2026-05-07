@@ -217,6 +217,7 @@ async def download_batch_originals(
         "completed": 0,
         "downloaded": 0,
         "failed_downloads": 0,
+        "failed_items": [],
         "skipped_items": 0,
         "current_item": None,
         "current_url": None,

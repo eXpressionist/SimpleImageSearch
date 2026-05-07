@@ -322,7 +322,7 @@ class BatchProcessor:
         count_per_item: int,
         target_dir: str,
         progress_callback: Any = None,
-    ) -> dict[str, int]:
+    ) -> dict[str, Any]:
         batch = await self.batch_repo.get_by_id(batch_id)
         if not batch:
             raise ValueError("Batch not found")
@@ -334,6 +334,7 @@ class BatchProcessor:
         download_plan: list[tuple[BatchItem, dict[str, Any], int, int]] = []
         downloaded = 0
         failed_downloads = 0
+        failed_items: list[dict[str, str]] = []
         skipped_items = 0
 
         for item in items:
@@ -357,6 +358,7 @@ class BatchProcessor:
             completed=completed,
             downloaded=downloaded,
             failed_downloads=failed_downloads,
+            failed_items=failed_items,
             skipped_items=skipped_items,
         )
 
@@ -371,6 +373,18 @@ class BatchProcessor:
             )
 
             try:
+                self._emit_original_download_progress(
+                    progress_callback,
+                    status="running",
+                    total=total,
+                    completed=completed,
+                    downloaded=downloaded,
+                    failed_downloads=failed_downloads,
+                    failed_items=failed_items,
+                    skipped_items=skipped_items,
+                    current_item=item.original_query,
+                    current_url=url,
+                )
                 await self.downloader.download_to_directory(
                     url,
                     target_dir,
@@ -379,6 +393,13 @@ class BatchProcessor:
                 downloaded += 1
             except Exception as error:
                 failed_downloads += 1
+                failed_items.append(
+                    {
+                        "item_name": item.original_query,
+                        "url": url,
+                        "error": str(error),
+                    }
+                )
                 logger.warning("Original download failed for %s: %s", url, error)
             finally:
                 completed += 1
@@ -389,6 +410,7 @@ class BatchProcessor:
                     completed=completed,
                     downloaded=downloaded,
                     failed_downloads=failed_downloads,
+                    failed_items=failed_items,
                     skipped_items=skipped_items,
                     current_item=item.original_query,
                     current_url=url,
@@ -399,6 +421,7 @@ class BatchProcessor:
             "total": total,
             "downloaded": downloaded,
             "failed_downloads": failed_downloads,
+            "failed_items": failed_items,
             "skipped_items": skipped_items,
         }
 

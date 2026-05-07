@@ -167,12 +167,23 @@ class ImageDownloader:
             except Exception as e:
                 last_error = e
                 logger.warning(f"Download attempt {attempt + 1} failed: {e}")
+
+                if self._is_non_retryable_download_error(e):
+                    raise
                 
                 if attempt < self.settings.max_retries - 1:
                     backoff = self.settings.retry_backoff_base ** attempt
                     await asyncio.sleep(backoff)
         
         raise last_error or Exception("Download failed")
+
+    def _is_non_retryable_download_error(self, error: Exception) -> bool:
+        match = re.fullmatch(r"HTTP (\d{3})", str(error))
+        if not match:
+            return False
+
+        status_code = int(match.group(1))
+        return 400 <= status_code < 500
     
     async def _download(self, url: str) -> tuple[bytes, str]:
         headers = {

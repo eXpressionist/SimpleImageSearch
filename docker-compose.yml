@@ -16,10 +16,10 @@ services:
       - GOOGLE_CSE_CX=${GOOGLE_CSE_CX}
       - STORAGE_PATH=/data/images
       - MAX_FILE_SIZE_MB=10
-      - DOWNLOAD_TIMEOUT=30
+      - DOWNLOAD_TIMEOUT=${DOWNLOAD_TIMEOUT:-30}
       - MAX_CONCURRENT_DOWNLOADS=5
-      - MAX_RETRIES=3
-      - RETRY_BACKOFF_BASE=2
+      - MAX_RETRIES=${MAX_RETRIES:-3}
+      - RETRY_BACKOFF_BASE=${RETRY_BACKOFF_BASE:-2}
       - LOG_LEVEL=INFO
     volumes:
       - image_data:/data/images

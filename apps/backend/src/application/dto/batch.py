@@ -70,6 +70,7 @@ class BatchOriginalDownloadResponseDTO(BaseModel):
     total: int
     downloaded: int
     failed_downloads: int
+    failed_items: list[dict[str, str]] = Field(default_factory=list)
     skipped_items: int
 
 
@@ -85,6 +86,7 @@ class BatchOriginalDownloadProgressDTO(BaseModel):
     completed: int = 0
     downloaded: int = 0
     failed_downloads: int = 0
+    failed_items: list[dict[str, str]] = Field(default_factory=list)
     skipped_items: int = 0
     current_item: Optional[str] = None
     current_url: Optional[str] = None
