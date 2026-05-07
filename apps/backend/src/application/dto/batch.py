@@ -67,5 +67,25 @@ class BatchOriginalDownloadRequestDTO(BaseModel):
 
 
 class BatchOriginalDownloadResponseDTO(BaseModel):
+    total: int
     downloaded: int
+    failed_downloads: int
     skipped_items: int
+
+
+class BatchOriginalDownloadJobDTO(BaseModel):
+    job_id: str
+    status: str
+
+
+class BatchOriginalDownloadProgressDTO(BaseModel):
+    job_id: str
+    status: str
+    total: int = 0
+    completed: int = 0
+    downloaded: int = 0
+    failed_downloads: int = 0
+    skipped_items: int = 0
+    current_item: Optional[str] = None
+    current_url: Optional[str] = None
+    error: Optional[str] = None

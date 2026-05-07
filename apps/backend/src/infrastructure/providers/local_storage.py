@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -107,7 +108,7 @@ class LocalFileStorage(StorageProvider):
             raise ValueError("Empty file")
 
         mime_type, width, height = self._analyze_image(data, content_type)
-        dir_path = Path(target_dir).expanduser()
+        dir_path = self._resolve_target_dir(target_dir)
         dir_path.mkdir(parents=True, exist_ok=True)
 
         if not dir_path.is_dir():
@@ -129,6 +130,19 @@ class LocalFileStorage(StorageProvider):
             width=width,
             height=height,
         )
+
+    def _resolve_target_dir(self, target_dir: str) -> Path:
+        if os.name != "nt" and re.match(r"^[A-Za-z]:[\\/]", target_dir):
+            raise ValueError(
+                "Windows paths are not available inside this container. "
+                "Mount the host folder into Docker and use the container path, for example /exports."
+            )
+
+        path = Path(target_dir).expanduser()
+        if not path.is_absolute():
+            raise ValueError("Target directory must be an absolute path available to the backend")
+
+        return path
     
     async def get_file_path(self, batch_id: str, item_id: str) -> Optional[str]:
         dir_path = self.base_path / batch_id / item_id

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
@@ -8,7 +8,7 @@ import { batchesApi } from '@/api/batches';
 import { itemsApi } from '@/api/items';
 import { useBatch, useBatchStats } from '@/hooks/useBatches';
 import { useBatchItems } from '@/hooks/useBatchItems';
-import type { ItemStatus, ItemWithImageResponse } from '@/types/api';
+import type { BatchOriginalDownloadProgress, ItemStatus, ItemWithImageResponse } from '@/types/api';
 
 export function BatchDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -24,6 +24,8 @@ export function BatchDetailPage() {
   const [downloadingOriginals, setDownloadingOriginals] = useState(false);
   const [downloadError, setDownloadError] = useState<Error | null>(null);
   const [downloadResult, setDownloadResult] = useState<string | null>(null);
+  const [downloadJobId, setDownloadJobId] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<BatchOriginalDownloadProgress | null>(null);
 
   const { data: batch, isLoading: batchLoading } = useBatch(id || '');
   const { data: stats, refetch: refetchStats } = useBatchStats(id || '');
@@ -54,7 +56,15 @@ export function BatchDetailPage() {
 
   const handleDownloadOriginals = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!id || !originalPath.trim()) return;
+    const targetDir = originalPath.trim();
+    if (!id || !targetDir) return;
+
+    if (/^[A-Za-z]:[\\/]/.test(targetDir)) {
+      setDownloadError(
+        new Error('Docker backend cannot write to Windows paths directly. Mount the folder and use /exports.')
+      );
+      return;
+    }
 
     setDownloadingOriginals(true);
     setDownloadError(null);
@@ -63,18 +73,50 @@ export function BatchDetailPage() {
     try {
       const result = await batchesApi.downloadOriginals(id, {
         count_per_item: originalCount,
-        target_dir: originalPath.trim(),
+        target_dir: targetDir,
       });
-      setDownloadResult(
-        `Downloaded ${result.downloaded} files` +
-          (result.skipped_items > 0 ? `, skipped ${result.skipped_items} items` : '')
-      );
+      setDownloadJobId(result.job_id);
+      setDownloadProgress(null);
     } catch (error) {
       setDownloadError(error instanceof Error ? error : new Error('Failed to download originals'));
-    } finally {
       setDownloadingOriginals(false);
     }
   };
+
+  useEffect(() => {
+    if (!downloadJobId) return undefined;
+
+    const loadProgress = async () => {
+      try {
+        const progress = await batchesApi.getOriginalDownloadProgress(downloadJobId);
+        setDownloadProgress(progress);
+
+        if (progress.status === 'completed') {
+          setDownloadingOriginals(false);
+          setDownloadJobId(null);
+          setDownloadResult(
+            `Downloaded ${progress.downloaded} files` +
+              (progress.failed_downloads > 0 ? `, failed ${progress.failed_downloads}` : '') +
+              (progress.skipped_items > 0 ? `, skipped ${progress.skipped_items} items` : '')
+          );
+        }
+
+        if (progress.status === 'failed') {
+          setDownloadingOriginals(false);
+          setDownloadJobId(null);
+          setDownloadError(new Error(progress.error || 'Failed to download originals'));
+        }
+      } catch (error) {
+        setDownloadingOriginals(false);
+        setDownloadJobId(null);
+        setDownloadError(error instanceof Error ? error : new Error('Failed to read download progress'));
+      }
+    };
+
+    loadProgress();
+    const intervalId = window.setInterval(loadProgress, 1000);
+    return () => window.clearInterval(intervalId);
+  }, [downloadJobId]);
 
   if (batchLoading) {
     return (
@@ -161,7 +203,7 @@ export function BatchDetailPage() {
             <input
               value={originalPath}
               onChange={(event) => setOriginalPath(event.target.value)}
-              placeholder="C:\\exports\\product-images"
+              placeholder="/exports"
               required
             />
           </label>
@@ -176,9 +218,26 @@ export function BatchDetailPage() {
             {downloadingOriginals ? 'Downloading...' : 'Download Originals'}
           </button>
           <span className="caption">
-            Saved as SKU-1, SKU-2... in one folder. Docker paths must be mounted.
+            Use an absolute backend path, for example /exports in Docker.
           </span>
         </div>
+
+        {downloadProgress && (
+          <div className="download-progress">
+            <div className="download-progress__bar" aria-label="Original download progress">
+              <div
+                style={{
+                  width: `${downloadProgress.total > 0 ? (downloadProgress.completed / downloadProgress.total) * 100 : 0}%`,
+                }}
+              />
+            </div>
+            <p className="caption">
+              {downloadProgress.completed} / {downloadProgress.total} processed · {downloadProgress.downloaded} saved
+              {downloadProgress.failed_downloads > 0 && ` · ${downloadProgress.failed_downloads} failed`}
+              {downloadProgress.current_item && ` · ${downloadProgress.current_item}`}
+            </p>
+          </div>
+        )}
       </form>
 
       <div className="card filter-card">

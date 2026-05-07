@@ -1,4 +1,5 @@
 import io
+import os
 
 import pytest
 from PIL import Image
@@ -50,3 +51,20 @@ async def test_save_to_directory_uses_flat_target_directory_and_preserves_filena
     assert result.mime_type == "image/png"
     assert (target_dir / "SKU-1.jpg").exists()
     assert not (target_dir / "batch-1").exists()
+
+
+@pytest.mark.asyncio
+async def test_save_to_directory_rejects_windows_path_inside_linux_container(tmp_path):
+    if os.name == "nt":
+        pytest.skip("Windows paths are valid on Windows hosts")
+
+    storage = LocalFileStorage(base_path=str(tmp_path / "storage"))
+    data = make_image_bytes("PNG")
+
+    with pytest.raises(ValueError, match="Windows paths are not available inside this container"):
+        await storage.save_to_directory(
+            data=data,
+            target_dir="C:\\Temp",
+            filename="item.png",
+            content_type="image/png",
+        )

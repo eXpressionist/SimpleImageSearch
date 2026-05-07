@@ -1,7 +1,8 @@
 import { api } from './client';
 import type {
   BatchOriginalDownloadRequest,
-  BatchOriginalDownloadResponse,
+  BatchOriginalDownloadJobResponse,
+  BatchOriginalDownloadProgress,
   BatchCreateRequest,
   BatchResponse,
   BatchListResponse,
@@ -29,7 +30,10 @@ export const batchesApi = {
     api.get<BatchStatsResponse>(`/batches/${id}/stats`),
 
   downloadOriginals: (id: string, data: BatchOriginalDownloadRequest) =>
-    api.post<BatchOriginalDownloadResponse>(`/batches/${id}/download-originals`, data),
+    api.post<BatchOriginalDownloadJobResponse>(`/batches/${id}/download-originals`, data),
+
+  getOriginalDownloadProgress: (jobId: string) =>
+    api.get<BatchOriginalDownloadProgress>(`/batches/download-originals/${jobId}`),
   
   delete: (id: string) =>
     api.delete<void>(`/batches/${id}`),

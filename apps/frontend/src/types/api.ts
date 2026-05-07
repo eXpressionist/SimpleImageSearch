@@ -52,9 +52,22 @@ export interface BatchOriginalDownloadRequest {
   target_dir: string;
 }
 
-export interface BatchOriginalDownloadResponse {
+export interface BatchOriginalDownloadJobResponse {
+  job_id: string;
+  status: string;
+}
+
+export interface BatchOriginalDownloadProgress {
+  job_id: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  total: number;
+  completed: number;
   downloaded: number;
+  failed_downloads: number;
   skipped_items: number;
+  current_item: string | null;
+  current_url: string | null;
+  error: string | null;
 }
 
 export interface ThumbnailInfo {

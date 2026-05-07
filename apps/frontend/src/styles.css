@@ -469,6 +469,25 @@ h2 {
   font-weight: 600;
 }
 
+.download-progress {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.download-progress__bar {
+  height: 0.55rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.download-progress__bar > div {
+  height: 100%;
+  border-radius: inherit;
+  background: #2563eb;
+  transition: width 180ms ease;
+}
+
 .center-panel,
 .empty-state {
   display: grid;

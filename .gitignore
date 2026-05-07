@@ -64,6 +64,8 @@ logs/
 # Uploaded files (keep structure but ignore content)
 data/images/*
 !data/images/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
 
 # OS
 .DS_Store

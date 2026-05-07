@@ -230,6 +230,23 @@ class ImageDownloader:
     def generate_sku_filename(self, url: str, number: int, content_type: str | None = None) -> str:
         ext = self._get_extension_from_url(url) or self._get_extension_from_mime(content_type or "")
         return f"SKU-{number}{ext}"
+
+    def generate_item_filename(
+        self,
+        item_name: str,
+        url: str,
+        index: int,
+        total: int,
+        content_type: str | None = None,
+    ) -> str:
+        ext = self._get_extension_from_url(url) or self._get_extension_from_mime(content_type or "")
+        base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", item_name.strip())
+        base = re.sub(r"\s+", "_", base)
+        base = base.strip("._-") or "image"
+
+        suffix = f"-{index}" if total > 1 else ""
+        max_base_length = 200 - len(suffix) - len(ext)
+        return f"{base[:max_base_length]}{suffix}{ext}"
     
     def _get_extension_from_url(self, url: str) -> str:
         path = urlparse(url).path.lower()

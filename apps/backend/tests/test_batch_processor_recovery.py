@@ -101,15 +101,19 @@ class FakeLogRepo:
 
 
 class FakeOriginalDownloader:
-    def __init__(self):
+    def __init__(self, failed_urls=None):
         self.calls = []
+        self.failed_urls = set(failed_urls or [])
 
-    def generate_sku_filename(self, url, number, _content_type=None):
+    def generate_item_filename(self, item_name, url, index, total, _content_type=None):
         ext = url.rsplit(".", 1)[-1]
-        return f"SKU-{number}.{ext}"
+        suffix = f"-{index}" if total > 1 else ""
+        return f"{item_name.replace(' ', '_')}{suffix}.{ext}"
 
     async def download_to_directory(self, url, target_dir, filename):
         self.calls.append((url, target_dir, filename))
+        if url in self.failed_urls:
+            raise ValueError("HTTP 403")
         return SimpleNamespace(
             file_path=f"{target_dir}/{filename}",
             file_name=filename,
@@ -263,7 +267,7 @@ async def test_process_batch_processes_items_sequentially_with_one_session():
 
 
 @pytest.mark.asyncio
-async def test_download_originals_for_batch_downloads_requested_originals_to_one_directory_with_sku_names():
+async def test_download_originals_for_batch_uses_item_names_in_one_directory():
     batch_id = uuid4()
     item_id = uuid4()
     batch = Batch(
@@ -309,7 +313,48 @@ async def test_download_originals_for_batch_downloads_requested_originals_to_one
     )
 
     assert processor.downloader.calls == [
-        ("https://cdn.example.test/a.jpg", "C:/exports/images", "SKU-1.jpg"),
-        ("https://cdn.example.test/b.png", "C:/exports/images", "SKU-2.png"),
+        ("https://cdn.example.test/a.jpg", "C:/exports/images", "SKU_phone-1.jpg"),
+        ("https://cdn.example.test/b.png", "C:/exports/images", "SKU_phone-2.png"),
     ]
-    assert result == {"downloaded": 2, "skipped_items": 0}
+    assert result == {"total": 2, "downloaded": 2, "failed_downloads": 0, "skipped_items": 0}
+
+
+@pytest.mark.asyncio
+async def test_download_originals_for_batch_continues_after_forbidden_original():
+    batch_id = uuid4()
+    item_id = uuid4()
+    batch = Batch(id=batch_id, name="originals", total_items=1)
+    item = BatchItem(
+        id=item_id,
+        batch_id=batch_id,
+        position=0,
+        original_query="Camera Lens",
+        normalized_query="camera lens",
+    )
+    processor = make_processor(batch, item)
+    processor.item_repo.batch_items = [item]
+    processor.image_repo.image = SimpleNamespace(
+        direct_url=json.dumps(
+            [
+                {"url": "https://cdn.example.test/blocked.jpg", "mime_type": "image/jpeg"},
+                {"url": "https://cdn.example.test/ok.png", "mime_type": "image/png"},
+            ]
+        )
+    )
+    progress_events = []
+    processor.downloader = FakeOriginalDownloader(failed_urls={"https://cdn.example.test/blocked.jpg"})
+
+    result = await processor.download_originals_for_batch(
+        batch_id,
+        count_per_item=2,
+        target_dir="C:/exports/images",
+        progress_callback=progress_events.append,
+    )
+
+    assert processor.downloader.calls == [
+        ("https://cdn.example.test/blocked.jpg", "C:/exports/images", "Camera_Lens-1.jpg"),
+        ("https://cdn.example.test/ok.png", "C:/exports/images", "Camera_Lens-2.png"),
+    ]
+    assert result == {"total": 2, "downloaded": 1, "failed_downloads": 1, "skipped_items": 0}
+    assert progress_events[-1]["status"] == "running"
+    assert progress_events[-1]["completed"] == 2

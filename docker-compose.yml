@@ -23,6 +23,7 @@ services:
       - LOG_LEVEL=INFO
     volumes:
       - image_data:/data/images
+      - ${EXPORTS_PATH:-./data/exports}:/exports
       - ./apps/backend:/app
     depends_on:
       db:
