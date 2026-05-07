@@ -25,7 +25,9 @@ export function BatchImportForm({ onSubmit, isLoading }: BatchImportFormProps) {
 
     if (lines.length === 0) return;
 
-    onSubmit(lines, name || undefined, { images_per_query: imagesPerQuery });
+    onSubmit(lines, name || undefined, {
+      images_per_query: imagesPerQuery,
+    });
   };
 
   return (
@@ -55,6 +57,7 @@ export function BatchImportForm({ onSubmit, isLoading }: BatchImportFormProps) {
           />
           <small>1-200 (Brave limit)</small>
         </label>
+
       </div>
 
       <label className="field">

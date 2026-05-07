@@ -4,6 +4,7 @@ import { BatchProgressBar } from '@/components/batch/BatchProgressBar';
 import { ErrorAlert } from '@/components/common/ErrorAlert';
 import { ItemGallery } from '@/components/item/ItemGallery';
 import { ItemTable } from '@/components/item/ItemTable';
+import { batchesApi } from '@/api/batches';
 import { itemsApi } from '@/api/items';
 import { useBatch, useBatchStats } from '@/hooks/useBatches';
 import { useBatchItems } from '@/hooks/useBatchItems';
@@ -18,6 +19,11 @@ export function BatchDetailPage() {
   const [viewMode, setViewMode] = useState<'table' | 'gallery'>('gallery');
   const [recovering, setRecovering] = useState(false);
   const [recoverError, setRecoverError] = useState<Error | null>(null);
+  const [originalCount, setOriginalCount] = useState(1);
+  const [originalPath, setOriginalPath] = useState('');
+  const [downloadingOriginals, setDownloadingOriginals] = useState(false);
+  const [downloadError, setDownloadError] = useState<Error | null>(null);
+  const [downloadResult, setDownloadResult] = useState<string | null>(null);
 
   const { data: batch, isLoading: batchLoading } = useBatch(id || '');
   const { data: stats, refetch: refetchStats } = useBatchStats(id || '');
@@ -43,6 +49,30 @@ export function BatchDetailPage() {
       setRecoverError(error instanceof Error ? error : new Error('Failed to recover stuck items'));
     } finally {
       setRecovering(false);
+    }
+  };
+
+  const handleDownloadOriginals = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!id || !originalPath.trim()) return;
+
+    setDownloadingOriginals(true);
+    setDownloadError(null);
+    setDownloadResult(null);
+
+    try {
+      const result = await batchesApi.downloadOriginals(id, {
+        count_per_item: originalCount,
+        target_dir: originalPath.trim(),
+      });
+      setDownloadResult(
+        `Downloaded ${result.downloaded} files` +
+          (result.skipped_items > 0 ? `, skipped ${result.skipped_items} items` : '')
+      );
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error : new Error('Failed to download originals'));
+    } finally {
+      setDownloadingOriginals(false);
     }
   };
 
@@ -111,6 +141,46 @@ export function BatchDetailPage() {
 
       {isProcessing && itemsData?.items && <ProcessingIndicator items={itemsData.items} />}
 
+      <form className="card filter-card" onSubmit={handleDownloadOriginals}>
+        <div className="form-grid">
+          <label className="field">
+            <span>Originals per item</span>
+            <input
+              min={1}
+              max={200}
+              type="number"
+              value={originalCount}
+              onChange={(event) =>
+                setOriginalCount(Math.min(200, Math.max(1, parseInt(event.target.value, 10) || 1)))
+              }
+            />
+          </label>
+
+          <label className="field field--wide">
+            <span>Originals folder</span>
+            <input
+              value={originalPath}
+              onChange={(event) => setOriginalPath(event.target.value)}
+              placeholder="C:\\exports\\product-images"
+              required
+            />
+          </label>
+        </div>
+
+        <div className="actions">
+          <button
+            className="button button--primary"
+            type="submit"
+            disabled={downloadingOriginals || isProcessing || !originalPath.trim()}
+          >
+            {downloadingOriginals ? 'Downloading...' : 'Download Originals'}
+          </button>
+          <span className="caption">
+            Saved as SKU-1, SKU-2... in one folder. Docker paths must be mounted.
+          </span>
+        </div>
+      </form>
+
       <div className="card filter-card">
         <label className="field field--inline">
           <span>Filter by status</span>
@@ -134,6 +204,8 @@ export function BatchDetailPage() {
 
       <ErrorAlert error={itemsError} />
       <ErrorAlert error={recoverError} onClose={() => setRecoverError(null)} />
+      <ErrorAlert error={downloadError} onClose={() => setDownloadError(null)} />
+      {downloadResult && <p className="success-text">{downloadResult}</p>}
 
       {itemsLoading && !itemsData ? (
         <div className="skeleton-stack">

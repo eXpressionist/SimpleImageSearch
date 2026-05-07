@@ -104,6 +104,23 @@ class ImageDownloader:
             url=url,
             item_id=item_id,
         )
+
+    async def download_to_directory(
+        self,
+        url: str,
+        target_dir: str,
+        filename: str,
+    ) -> StorageResult:
+        self._validate_url(url)
+        data, content_type = await self._download_with_retry(url)
+        self._validate_content(data, content_type)
+
+        return await self.storage.save_to_directory(
+            data=data,
+            target_dir=target_dir,
+            filename=filename,
+            content_type=content_type,
+        )
     
     def _validate_url(self, url: str) -> None:
         if not url:
@@ -209,6 +226,10 @@ class ImageDownloader:
             filename = "image"
         
         return f"{filename}{ext}"
+
+    def generate_sku_filename(self, url: str, number: int, content_type: str | None = None) -> str:
+        ext = self._get_extension_from_url(url) or self._get_extension_from_mime(content_type or "")
+        return f"SKU-{number}{ext}"
     
     def _get_extension_from_url(self, url: str) -> str:
         path = urlparse(url).path.lower()

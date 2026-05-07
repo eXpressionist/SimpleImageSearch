@@ -47,6 +47,16 @@ export interface BatchStatsResponse {
   review_needed: number;
 }
 
+export interface BatchOriginalDownloadRequest {
+  count_per_item: number;
+  target_dir: string;
+}
+
+export interface BatchOriginalDownloadResponse {
+  downloaded: number;
+  skipped_items: number;
+}
+
 export interface ThumbnailInfo {
   position: number;
   url: string;

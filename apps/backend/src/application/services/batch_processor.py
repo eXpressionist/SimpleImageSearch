@@ -153,23 +153,17 @@ class BatchProcessor:
         await self.batch_repo.update(batch)
         await self.session.commit()
 
-        tasks = []
         while True:
             items = await self.item_repo.get_pending(batch_id, limit=self.settings.max_concurrent_downloads)
             if not items:
                 break
 
             for item in items:
-                task = asyncio.create_task(self._process_item_with_semaphore(batch_id, item.id))
-                tasks.append(task)
-
-            await asyncio.gather(*tasks, return_exceptions=True)
-            tasks = []
+                await self._process_item_with_semaphore(batch_id, item.id)
 
         batch = await self.batch_repo.get_by_id(batch_id)
         if batch:
-            batch.mark_completed()
-            await self.batch_repo.update(batch)
+            await self._sync_batch_progress(batch_id)
             await self.session.commit()
 
         logger.info(f"Batch completed: {batch_id}")
@@ -190,6 +184,17 @@ class BatchProcessor:
         logger.info(f"Item query: {item.original_query}")
 
         try:
+            existing_image = await self.image_repo.get_by_item(item_id)
+            if existing_image:
+                if item.status != ItemStatus.SAVED:
+                    item.mark_saved()
+                    await self.item_repo.update(item)
+                    await self._log(item_id, "search", "success", "Reused existing image asset")
+                await self._sync_batch_progress(batch_id)
+                await self.session.commit()
+                logger.info(f"ITEM ALREADY HAS IMAGE ASSET: {item_id}")
+                return
+
             item.mark_searching()
             await self.item_repo.update(item)
             await self.session.commit()
@@ -279,6 +284,7 @@ class BatchProcessor:
                 await self.batch_repo.update(batch)
 
             await self._log(item_id, "search", "success", f"Saved {len(thumbnails_data)} thumbnails")
+            await self._sync_batch_progress(batch_id)
             await self.session.commit()
             logger.info(f"ITEM PROCESSED SUCCESSFULLY: {item_id} with {len(thumbnails_data)} thumbnails")
 
@@ -288,17 +294,14 @@ class BatchProcessor:
             logger.error(traceback.format_exc())
             
             try:
+                await self.session.rollback()
                 item = await self.item_repo.get_by_id(item_id)
                 if item:
                     item.mark_failed(str(e)[:500])
                     await self.item_repo.update(item)
 
-                    batch = await self.batch_repo.get_by_id(batch_id)
-                    if batch:
-                        batch.increment_processed(failed=True)
-                        await self.batch_repo.update(batch)
-
                     await self._log(item_id, "process", "error", str(e))
+                    await self._sync_batch_progress(batch_id)
                     await self.session.commit()
             except Exception as commit_error:
                 logger.error(f"Failed to commit error state: {commit_error}")
@@ -312,6 +315,110 @@ class BatchProcessor:
             img_size=config.get("img_size", "large"),
             preferred_formats=["webp", "png", "jpg", "jpeg"],
         )
+
+    async def download_originals_for_batch(
+        self,
+        batch_id: UUID,
+        count_per_item: int,
+        target_dir: str,
+    ) -> dict[str, int]:
+        batch = await self.batch_repo.get_by_id(batch_id)
+        if not batch:
+            raise ValueError("Batch not found")
+
+        if not target_dir:
+            raise ValueError("Original download path is required")
+
+        items = await self.item_repo.get_by_batch(batch_id, limit=batch.total_items)
+        downloaded = 0
+        skipped_items = 0
+
+        for item in items:
+            image = await self.image_repo.get_by_item(item.id)
+            thumbnails = self._parse_thumbnail_payload(image.direct_url if image else "")
+            if not thumbnails:
+                skipped_items += 1
+                continue
+
+            for thumbnail in thumbnails[:count_per_item]:
+                url = thumbnail.get("url")
+                if not url:
+                    continue
+
+                number = downloaded + 1
+                filename = self.downloader.generate_sku_filename(
+                    url,
+                    number,
+                    thumbnail.get("mime_type"),
+                )
+                await self.downloader.download_to_directory(
+                    url,
+                    target_dir,
+                    filename,
+                )
+                downloaded += 1
+
+        await self._log_batch_original_download(batch_id, downloaded, skipped_items, target_dir)
+        return {"downloaded": downloaded, "skipped_items": skipped_items}
+
+    def _parse_thumbnail_payload(self, payload: str) -> list[dict[str, Any]]:
+        if not payload:
+            return []
+
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            return []
+
+        if not isinstance(parsed, list):
+            return []
+
+        return [item for item in parsed if isinstance(item, dict)]
+
+    async def _log_batch_original_download(
+        self,
+        batch_id: UUID,
+        downloaded: int,
+        skipped_items: int,
+        target_dir: str,
+    ) -> None:
+        first_item = (await self.item_repo.get_by_batch(batch_id, limit=1))[:1]
+        if not first_item:
+            return
+
+        await self._log(
+            first_item[0].id,
+            "download_originals",
+            "success",
+            (
+                f"Downloaded {downloaded} originals to {target_dir}; "
+                f"skipped {skipped_items} items without thumbnails"
+            )
+        )
+
+    async def _sync_batch_progress(self, batch_id: UUID) -> None:
+        batch = await self.batch_repo.get_by_id(batch_id)
+        if not batch:
+            return
+
+        saved = await self.item_repo.count_by_batch(batch_id, ItemStatus.SAVED)
+        failed = await self.item_repo.count_by_batch(batch_id, ItemStatus.FAILED)
+        review_needed = await self.item_repo.count_by_batch(batch_id, ItemStatus.REVIEW_NEEDED)
+        pending = await self.item_repo.count_by_batch(batch_id, ItemStatus.PENDING)
+        searching = await self.item_repo.count_by_batch(batch_id, ItemStatus.SEARCHING)
+        downloading = await self.item_repo.count_by_batch(batch_id, ItemStatus.DOWNLOADING)
+
+        batch.processed_items = saved + failed + review_needed
+        batch.failed_items = failed
+
+        if pending + searching + downloading > 0 and batch.processed_items < batch.total_items:
+            batch.status = BatchStatus.PROCESSING
+        elif failed + review_needed > 0:
+            batch.status = BatchStatus.PARTIAL
+        else:
+            batch.status = BatchStatus.COMPLETED
+
+        await self.batch_repo.update(batch)
 
     async def _log(self, item_id: UUID, action: str, status: str, message: str) -> None:
         log = ProcessingLog.create(

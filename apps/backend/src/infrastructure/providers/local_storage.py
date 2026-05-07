@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 from typing import Optional
 import aiofiles
-import imghdr
 from PIL import Image
 import io
 
@@ -50,11 +49,14 @@ class LocalFileStorage(StorageProvider):
             logger.error("Empty file")
             raise ValueError("Empty file")
         
+        mime_type, width, height = self._analyze_image(data, content_type)
+        
         dir_path = self.base_path / batch_id / item_id
         logger.info(f"Creating directory: {dir_path}")
         dir_path.mkdir(parents=True, exist_ok=True)
         
         safe_filename = self._normalize_filename(filename)
+        safe_filename = self._normalize_image_extension(safe_filename, mime_type)
         file_path = dir_path / safe_filename
         logger.info(f"Full file path: {file_path}")
         
@@ -72,11 +74,52 @@ class LocalFileStorage(StorageProvider):
         else:
             logger.error(f"File does not exist after write: {file_path}")
         
-        mime_type, width, height = self._analyze_image(data, content_type)
-        
         logger.info(f"MIME: {mime_type}, Dimensions: {width}x{height}")
         logger.info("=" * 40)
         
+        return StorageResult(
+            file_path=str(file_path),
+            file_name=safe_filename,
+            mime_type=mime_type,
+            file_size=len(data),
+            file_hash=file_hash,
+            width=width,
+            height=height,
+        )
+
+    async def save_to_directory(
+        self,
+        data: bytes,
+        target_dir: str,
+        filename: str,
+        content_type: Optional[str] = None,
+    ) -> StorageResult:
+        logger.info("=" * 40)
+        logger.info("LOCAL STORAGE FLAT SAVE")
+        logger.info(f"Target dir: {target_dir}")
+        logger.info(f"Filename: {filename}")
+        logger.info(f"Data size: {len(data)} bytes")
+
+        if len(data) > self.max_file_size_bytes:
+            raise ValueError(f"File too large: {len(data)} bytes > {self.max_file_size_bytes}")
+
+        if len(data) == 0:
+            raise ValueError("Empty file")
+
+        mime_type, width, height = self._analyze_image(data, content_type)
+        dir_path = Path(target_dir).expanduser()
+        dir_path.mkdir(parents=True, exist_ok=True)
+
+        if not dir_path.is_dir():
+            raise ValueError(f"Target path is not a directory: {target_dir}")
+
+        safe_filename = self._normalize_filename(filename)
+        file_path = dir_path / safe_filename
+        file_hash = hashlib.sha256(data).hexdigest()
+
+        async with aiofiles.open(file_path, "wb") as f:
+            await f.write(data)
+
         return StorageResult(
             file_path=str(file_path),
             file_name=safe_filename,
@@ -127,8 +170,6 @@ class LocalFileStorage(StorageProvider):
         return name
     
     def _analyze_image(self, data: bytes, content_type: Optional[str] = None) -> tuple[str, Optional[int], Optional[int]]:
-        detected_format = imghdr.what(None, h=data)
-        
         mime_map = {
             "jpeg": "image/jpeg",
             "jpg": "image/jpeg",
@@ -137,23 +178,19 @@ class LocalFileStorage(StorageProvider):
             "webp": "image/webp",
             "bmp": "image/bmp",
         }
+
+        try:
+            with Image.open(io.BytesIO(data)) as img:
+                detected_format = (img.format or "").lower()
+                mime_type = mime_map.get(detected_format, f"image/{detected_format}" if detected_format else "")
+                return mime_type or "application/octet-stream", img.width, img.height
+        except Exception as e:
+            logger.debug(f"Could not analyze image bytes: {e}")
         
         if content_type and content_type.startswith("image/"):
-            mime_type = content_type
-        elif detected_format:
-            mime_type = mime_map.get(detected_format, f"image/{detected_format}")
-        else:
-            mime_type = "application/octet-stream"
+            return content_type, None, None
         
-        width, height = None, None
-        try:
-            img = Image.open(io.BytesIO(data))
-            width, height = img.width, img.height
-            img.close()
-        except Exception as e:
-            logger.debug(f"Could not determine image dimensions: {e}")
-        
-        return mime_type, width, height
+        return "application/octet-stream", None, None
     
     def get_extension_from_mime(self, mime_type: str) -> str:
         mime_to_ext = {
@@ -164,3 +201,14 @@ class LocalFileStorage(StorageProvider):
             "image/bmp": ".bmp",
         }
         return mime_to_ext.get(mime_type, ".bin")
+
+    def _normalize_image_extension(self, filename: str, mime_type: str) -> str:
+        ext = self.get_extension_from_mime(mime_type)
+        if ext == ".bin":
+            return filename
+
+        path = Path(filename)
+        if path.suffix.lower() == ext:
+            return filename
+
+        return f"{path.stem}{ext}"

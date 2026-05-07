@@ -6,14 +6,20 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.application.dto.batch import (
-    BatchCreateDTO, BatchResponseDTO, BatchListDTO, BatchStatsDTO
+    BatchCreateDTO,
+    BatchOriginalDownloadRequestDTO,
+    BatchOriginalDownloadResponseDTO,
+    BatchResponseDTO,
+    BatchListDTO,
+    BatchStatsDTO,
 )
 from src.application.dto.item import ItemListDTO, ItemWithImageDTO
 from src.infrastructure.database import BatchRepository, ItemRepository, ImageRepository
 from src.domain.value_objects import BatchStatus, ItemStatus
-from src.api.dependencies import get_batch_processor, get_db_session
+from src.api.dependencies import get_batch_processor, get_db_session, get_storage
 from src.application.services import BatchProcessor
 from src.application.services.batch_processor import process_batch_background
+from src.infrastructure.providers import LocalFileStorage
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
@@ -189,6 +195,33 @@ async def get_batch_stats(
         failed=await item_repo.count_by_batch(batch_id, ItemStatus.FAILED),
         review_needed=await item_repo.count_by_batch(batch_id, ItemStatus.REVIEW_NEEDED),
     )
+
+
+@router.post("/{batch_id}/download-originals", response_model=BatchOriginalDownloadResponseDTO)
+async def download_batch_originals(
+    batch_id: UUID,
+    data: BatchOriginalDownloadRequestDTO,
+    session: AsyncSession = Depends(get_db_session),
+    storage: LocalFileStorage = Depends(get_storage),
+):
+    processor = BatchProcessor(
+        session=session,
+        search_provider=None,
+        storage=storage,
+    )
+
+    try:
+        result = await processor.download_originals_for_batch(
+            batch_id=batch_id,
+            count_per_item=data.count_per_item,
+            target_dir=data.target_dir,
+        )
+    except ValueError as error:
+        if str(error) == "Batch not found":
+            raise HTTPException(status_code=404, detail="Batch not found")
+        raise HTTPException(status_code=400, detail=str(error))
+
+    return BatchOriginalDownloadResponseDTO(**result)
 
 
 @router.delete("/{batch_id}", status_code=204)

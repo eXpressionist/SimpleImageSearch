@@ -210,8 +210,9 @@ class ItemRepository:
         stuck_items = await self.get_stuck_items(batch_id, stuck_minutes)
         recovered_count = 0
         for item in stuck_items:
+            previous_status = item.status
             item.status = ItemStatus.PENDING
-            item.error_message = f"Auto-recovered from {item.status.value} state"
+            item.error_message = f"Auto-recovered from {previous_status.value} state"
             await self.update(item)
             recovered_count += 1
         return recovered_count

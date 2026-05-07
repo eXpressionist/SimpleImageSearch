@@ -32,6 +32,16 @@ class StorageProvider(Protocol):
         - MIME type detection
         """
         ...
+
+    async def save_to_directory(
+        self,
+        data: bytes,
+        target_dir: str,
+        filename: str,
+        content_type: str | None = None,
+    ) -> StorageResult:
+        """Save file directly into a caller-provided flat directory."""
+        ...
     
     async def get_file_path(self, batch_id: str, item_id: str) -> str | None:
         """Get absolute file path for serving, or None if not found."""

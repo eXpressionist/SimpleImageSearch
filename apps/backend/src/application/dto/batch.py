@@ -59,3 +59,13 @@ class BatchStatsDTO(BaseModel):
     saved: int
     failed: int
     review_needed: int
+
+
+class BatchOriginalDownloadRequestDTO(BaseModel):
+    count_per_item: int = Field(..., ge=1, le=200)
+    target_dir: str = Field(..., min_length=1, max_length=1000)
+
+
+class BatchOriginalDownloadResponseDTO(BaseModel):
+    downloaded: int
+    skipped_items: int
