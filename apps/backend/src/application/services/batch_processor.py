@@ -334,7 +334,7 @@ class BatchProcessor:
         download_plan: list[tuple[BatchItem, dict[str, Any], int, int]] = []
         downloaded = 0
         failed_downloads = 0
-        failed_items: list[dict[str, str]] = []
+        failed_items: list[dict[str, str | int]] = []
         skipped_items = 0
 
         for item in items:
@@ -396,6 +396,7 @@ class BatchProcessor:
                 failed_items.append(
                     {
                         "item_name": item.original_query,
+                        "original_number": index,
                         "url": url,
                         "error": str(error),
                     }

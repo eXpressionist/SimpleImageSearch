@@ -243,7 +243,9 @@ export function BatchDetailPage() {
                 <ul>
                   {downloadProgress.failed_items.map((item) => (
                     <li key={`${item.item_name}-${item.url}`}>
-                      <span>{item.item_name}</span>
+                      <span>
+                        {item.item_name} #{item.original_number}
+                      </span>
                       <span>{item.error}</span>
                     </li>
                   ))}

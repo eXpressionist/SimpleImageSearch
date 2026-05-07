@@ -368,6 +368,7 @@ async def test_download_originals_for_batch_continues_after_forbidden_original()
         "failed_items": [
             {
                 "item_name": "Camera Lens",
+                "original_number": 1,
                 "url": "https://cdn.example.test/blocked.jpg",
                 "error": "HTTP 403",
             }
@@ -379,6 +380,7 @@ async def test_download_originals_for_batch_continues_after_forbidden_original()
     assert progress_events[-1]["failed_items"] == [
         {
             "item_name": "Camera Lens",
+            "original_number": 1,
             "url": "https://cdn.example.test/blocked.jpg",
             "error": "HTTP 403",
         }
