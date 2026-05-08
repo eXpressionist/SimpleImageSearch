@@ -359,7 +359,7 @@ async def test_download_originals_for_batch_continues_after_forbidden_original()
 
     assert processor.downloader.calls == [
         ("https://cdn.example.test/blocked.jpg", "C:/exports/images", "Camera_Lens-1.jpg"),
-        ("https://cdn.example.test/ok.png", "C:/exports/images", "Camera_Lens-2.png"),
+        ("https://cdn.example.test/ok.png", "C:/exports/images", "Camera_Lens-1.png"),
     ]
     assert result == {
         "total": 2,
@@ -385,6 +385,91 @@ async def test_download_originals_for_batch_continues_after_forbidden_original()
             "error": "HTTP 403",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_download_originals_for_batch_shifts_right_after_failed_original():
+    batch_id = uuid4()
+    item_id = uuid4()
+    batch = Batch(id=batch_id, name="originals", total_items=1)
+    item = BatchItem(
+        id=item_id,
+        batch_id=batch_id,
+        position=0,
+        original_query="Rack Cabinet",
+        normalized_query="rack cabinet",
+    )
+    processor = make_processor(batch, item)
+    processor.item_repo.batch_items = [item]
+    processor.image_repo.image = SimpleNamespace(
+        direct_url=json.dumps(
+            [
+                {"url": "https://cdn.example.test/first.jpg", "mime_type": "image/jpeg", "file_size": 100},
+                {"url": "https://cdn.example.test/blocked.jpg", "mime_type": "image/jpeg", "file_size": 100},
+                {"url": "https://cdn.example.test/replacement.png", "mime_type": "image/png", "file_size": 100},
+            ]
+        )
+    )
+    processor.downloader = FakeOriginalDownloader(failed_urls={"https://cdn.example.test/blocked.jpg"})
+
+    result = await processor.download_originals_for_batch(
+        batch_id,
+        count_per_item=2,
+        target_dir="C:/exports/images",
+    )
+
+    assert processor.downloader.calls == [
+        ("https://cdn.example.test/first.jpg", "C:/exports/images", "Rack_Cabinet-1.jpg"),
+        ("https://cdn.example.test/blocked.jpg", "C:/exports/images", "Rack_Cabinet-2.jpg"),
+        ("https://cdn.example.test/replacement.png", "C:/exports/images", "Rack_Cabinet-2.png"),
+    ]
+    assert result["downloaded"] == 2
+    assert result["failed_downloads"] == 1
+    assert result["failed_items"] == [
+        {
+            "item_name": "Rack Cabinet",
+            "original_number": 2,
+            "url": "https://cdn.example.test/blocked.jpg",
+            "error": "HTTP 403",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_download_originals_for_batch_skips_empty_file_size_candidates():
+    batch_id = uuid4()
+    item_id = uuid4()
+    batch = Batch(id=batch_id, name="originals", total_items=1)
+    item = BatchItem(
+        id=item_id,
+        batch_id=batch_id,
+        position=0,
+        original_query="Power Adapter",
+        normalized_query="power adapter",
+    )
+    processor = make_processor(batch, item)
+    processor.item_repo.batch_items = [item]
+    processor.image_repo.image = SimpleNamespace(
+        direct_url=json.dumps(
+            [
+                {"url": "https://cdn.example.test/empty.webp", "mime_type": "image/webp", "file_size": 0},
+                {"url": "https://cdn.example.test/ok.jpg", "mime_type": "image/jpeg", "file_size": 100},
+            ]
+        )
+    )
+    processor.downloader = FakeOriginalDownloader()
+
+    result = await processor.download_originals_for_batch(
+        batch_id,
+        count_per_item=1,
+        target_dir="C:/exports/images",
+    )
+
+    assert processor.downloader.calls == [
+        ("https://cdn.example.test/ok.jpg", "C:/exports/images", "Power_Adapter.jpg"),
+    ]
+    assert result["downloaded"] == 1
+    assert result["failed_downloads"] == 0
 
 
 @pytest.mark.asyncio

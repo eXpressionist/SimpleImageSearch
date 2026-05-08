@@ -47,6 +47,7 @@ def test_parse_files_trims_blank_lines_and_keeps_order():
         ("ABC-001", "abc001"),
         ("ABC_001.jpg", "abc001"),
         ("abc 001 main.webp", "abc001"),
+        ("USW-FLEX-2.5G-8", "uswflex25g8"),
     ],
 )
 def test_normalize_for_match(value, expected):
@@ -135,6 +136,45 @@ def test_generate_uses_fuzzy_match_above_threshold():
     assert report.matches[0].confidence >= 0.8
     assert report.unmatched_products == []
     assert report.unused_files == []
+
+
+def test_generate_matches_hyphenated_numeric_skus_with_image_number_suffixes():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="101\tUDC-1\n102\tUDC-2\n103\tUDC-3",
+        files_text="UDC-1-1.png\nUDC-2-1.png\nUDC-3-1.png",
+        image_prefix="catalog/products/",
+        settings=OpenCartMatchSettings(use_openrouter=False),
+    )
+
+    assert [(m.product_id, m.sku, m.filename, m.method.value) for m in report.matches] == [
+        (101, "UDC-1", "UDC-1-1.png", "normalized"),
+        (102, "UDC-2", "UDC-2-1.png", "normalized"),
+        (103, "UDC-3", "UDC-3-1.png", "normalized"),
+    ]
+    assert report.conflicts == []
+    assert report.unmatched_products == []
+    assert report.unused_files == []
+
+
+def test_generate_keeps_hyphenated_numeric_skus_distinct_from_nearby_files():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="201\tUSW-FLEX-2.5G-8\n202\tUSW-Flex-2.5G-8-PoE",
+        files_text="USW-Flex-2.5G-5-1.jpeg\nUSW-FLEX-2.5G-8-1.png\nUSW-Flex-2.5G-8-PoE.jpg",
+        image_prefix="catalog/products/",
+        settings=OpenCartMatchSettings(use_openrouter=False),
+    )
+
+    assert [(m.product_id, m.sku, m.filename, m.method.value) for m in report.matches] == [
+        (201, "USW-FLEX-2.5G-8", "USW-FLEX-2.5G-8-1.png", "normalized"),
+        (202, "USW-Flex-2.5G-8-PoE", "USW-Flex-2.5G-8-PoE.jpg", "exact"),
+    ]
+    assert report.conflicts == []
+    assert report.unmatched_products == []
+    assert report.unused_files == ["USW-Flex-2.5G-5-1.jpeg"]
 
 
 def test_generate_applies_and_validates_llm_matches():

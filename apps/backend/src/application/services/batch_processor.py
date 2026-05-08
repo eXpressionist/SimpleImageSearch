@@ -331,26 +331,13 @@ class BatchProcessor:
             raise ValueError("Original download path is required")
 
         items = await self.item_repo.get_by_batch(batch_id, limit=batch.total_items)
-        download_plan: list[tuple[BatchItem, dict[str, Any], int, int]] = []
         downloaded = 0
         failed_downloads = 0
         failed_items: list[dict[str, str | int]] = []
         skipped_items = 0
 
-        for item in items:
-            image = await self.image_repo.get_by_item(item.id)
-            thumbnails = self._parse_thumbnail_payload(image.direct_url if image else "")
-            if not thumbnails:
-                skipped_items += 1
-                continue
-
-            selected_thumbnails = [thumbnail for thumbnail in thumbnails[:count_per_item] if thumbnail.get("url")]
-            total_for_item = len(selected_thumbnails)
-            for index, thumbnail in enumerate(selected_thumbnails, start=1):
-                download_plan.append((item, thumbnail, index, total_for_item))
-
         completed = 0
-        total = len(download_plan)
+        total = 0
         self._emit_original_download_progress(
             progress_callback,
             status="running",
@@ -362,60 +349,81 @@ class BatchProcessor:
             skipped_items=skipped_items,
         )
 
-        for item, thumbnail, index, total_for_item in download_plan:
-            url = thumbnail["url"]
-            filename = self.downloader.generate_item_filename(
-                item.original_query,
-                url,
-                index,
-                total_for_item,
-                thumbnail.get("mime_type"),
-            )
+        for item in items:
+            image = await self.image_repo.get_by_item(item.id)
+            thumbnails = self._parse_thumbnail_payload(image.direct_url if image else "")
+            candidates = [
+                (candidate_number, thumbnail)
+                for candidate_number, thumbnail in enumerate(thumbnails, start=1)
+                if self._is_original_download_candidate(thumbnail)
+            ]
+            if not candidates:
+                skipped_items += 1
+                continue
 
-            try:
-                self._emit_original_download_progress(
-                    progress_callback,
-                    status="running",
-                    total=total,
-                    completed=completed,
-                    downloaded=downloaded,
-                    failed_downloads=failed_downloads,
-                    failed_items=failed_items,
-                    skipped_items=skipped_items,
-                    current_item=item.original_query,
-                    current_url=url,
-                )
-                await self.downloader.download_to_directory(
+            saved_for_item = 0
+            target_for_item = min(count_per_item, len(candidates))
+
+            for original_number, thumbnail in candidates:
+                if saved_for_item >= count_per_item:
+                    break
+
+                url = thumbnail["url"]
+                output_index = saved_for_item + 1
+                total += 1
+                filename = self.downloader.generate_item_filename(
+                    item.original_query,
                     url,
-                    target_dir,
-                    filename,
+                    output_index,
+                    target_for_item,
+                    thumbnail.get("mime_type"),
                 )
-                downloaded += 1
-            except Exception as error:
-                failed_downloads += 1
-                failed_items.append(
-                    {
-                        "item_name": item.original_query,
-                        "original_number": index,
-                        "url": url,
-                        "error": str(error),
-                    }
-                )
-                logger.warning("Original download failed for %s: %s", url, error)
-            finally:
-                completed += 1
-                self._emit_original_download_progress(
-                    progress_callback,
-                    status="running",
-                    total=total,
-                    completed=completed,
-                    downloaded=downloaded,
-                    failed_downloads=failed_downloads,
-                    failed_items=failed_items,
-                    skipped_items=skipped_items,
-                    current_item=item.original_query,
-                    current_url=url,
-                )
+
+                try:
+                    self._emit_original_download_progress(
+                        progress_callback,
+                        status="running",
+                        total=total,
+                        completed=completed,
+                        downloaded=downloaded,
+                        failed_downloads=failed_downloads,
+                        failed_items=failed_items,
+                        skipped_items=skipped_items,
+                        current_item=item.original_query,
+                        current_url=url,
+                    )
+                    await self.downloader.download_to_directory(
+                        url,
+                        target_dir,
+                        filename,
+                    )
+                    downloaded += 1
+                    saved_for_item += 1
+                except Exception as error:
+                    failed_downloads += 1
+                    failed_items.append(
+                        {
+                            "item_name": item.original_query,
+                            "original_number": original_number,
+                            "url": url,
+                            "error": str(error),
+                        }
+                    )
+                    logger.warning("Original download failed for %s: %s", url, error)
+                finally:
+                    completed += 1
+                    self._emit_original_download_progress(
+                        progress_callback,
+                        status="running",
+                        total=total,
+                        completed=completed,
+                        downloaded=downloaded,
+                        failed_downloads=failed_downloads,
+                        failed_items=failed_items,
+                        skipped_items=skipped_items,
+                        current_item=item.original_query,
+                        current_url=url,
+                    )
 
         await self._log_batch_original_download(batch_id, downloaded, skipped_items, target_dir)
         return {
@@ -443,6 +451,12 @@ class BatchProcessor:
             return []
 
         return [item for item in parsed if isinstance(item, dict)]
+
+    def _is_original_download_candidate(self, thumbnail: dict[str, Any]) -> bool:
+        if not thumbnail.get("url"):
+            return False
+
+        return thumbnail.get("file_size") != 0
 
     async def _log_batch_original_download(
         self,

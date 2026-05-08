@@ -19,6 +19,7 @@ from src.domain.entities.opencart_image_match import (
 
 
 class OpenCartImageMatcher:
+    _image_extensions = {"avif", "bmp", "gif", "jpeg", "jpg", "png", "tif", "tiff", "webp"}
     _service_words = {"main", "photo", "image", "img", "foto", "product"}
     _product_splitter = re.compile(r"^\s*(\d+)\s*(?:[\t;,]|\s+)\s*(\S.*?)\s*$")
 
@@ -119,6 +120,8 @@ class OpenCartImageMatcher:
                 used_files=used_files,
             )
 
+        product_positions = {product.product_id: index for index, product in enumerate(products)}
+        report.matches.sort(key=lambda match: product_positions.get(match.product_id, len(product_positions)))
         report.unmatched_products = [product for product in products if product.product_id not in matched_product_ids]
         report.unused_files = [filename for filename in files if filename not in used_files]
         report.low_confidence_matches = [
@@ -163,14 +166,21 @@ class OpenCartImageMatcher:
         method: OpenCartMatchMethod,
         ignore_service_words: bool,
     ) -> None:
-        file_keys = {filename: self.normalize_for_match(filename, ignore_service_words=ignore_service_words) for filename in files}
+        file_keys = {
+            filename: self._filename_match_keys(
+                filename,
+                ignore_service_words=ignore_service_words,
+                include_numeric_suffix_variant=method is not OpenCartMatchMethod.EXACT,
+            )
+            for filename in files
+        }
 
         for product in products:
             if product.product_id in matched_product_ids:
                 continue
 
             product_key = self.normalize_for_match(product.sku, ignore_service_words=ignore_service_words)
-            matching_files = [filename for filename in files if file_keys[filename] == product_key]
+            matching_files = [filename for filename in files if product_key in file_keys[filename]]
             available_files = [filename for filename in matching_files if filename not in used_files]
 
             if len(available_files) == 1:
@@ -221,18 +231,16 @@ class OpenCartImageMatcher:
                 continue
 
             product_key = self.normalize_for_match(product.sku, ignore_service_words=settings.ignore_service_words)
-            scored = [
-                (
-                    SequenceMatcher(
-                        None,
-                        product_key,
-                        self.normalize_for_match(filename, ignore_service_words=settings.ignore_service_words),
-                    ).ratio(),
+            scored = []
+            for filename in files:
+                if filename in used_files:
+                    continue
+                file_keys = self._filename_match_keys(
                     filename,
+                    ignore_service_words=settings.ignore_service_words,
+                    include_numeric_suffix_variant=True,
                 )
-                for filename in files
-                if filename not in used_files
-            ]
+                scored.append((max(SequenceMatcher(None, product_key, file_key).ratio() for file_key in file_keys), filename))
             candidates = [(score, filename) for score, filename in scored if score >= settings.fuzzy_threshold]
             if not candidates:
                 continue
@@ -383,11 +391,39 @@ class OpenCartImageMatcher:
             return
         report.conflicts.append(conflict)
 
+    def _filename_match_keys(
+        self,
+        filename: str,
+        *,
+        ignore_service_words: bool,
+        include_numeric_suffix_variant: bool,
+    ) -> set[str]:
+        keys = {self.normalize_for_match(filename, ignore_service_words=ignore_service_words)}
+        if not include_numeric_suffix_variant:
+            return keys
+
+        stripped_stem = self._strip_trailing_numeric_suffix(self._filename_stem(filename))
+        if stripped_stem:
+            keys.add(self.normalize_for_match(stripped_stem, ignore_service_words=ignore_service_words))
+        return keys
+
+    def _strip_trailing_numeric_suffix(self, stem: str) -> str | None:
+        match = re.match(r"^(.+?)[\s._-]+\d+$", stem)
+        if not match:
+            return None
+        return match.group(1)
+
     def _filename_stem(self, value: str) -> str:
         normalized = value.strip().replace("\\", "/")
         filename = PurePosixPath(normalized).name
         windows_name = PureWindowsPath(filename).name
-        return windows_name.rsplit(".", 1)[0] if "." in windows_name else windows_name
+        if "." not in windows_name:
+            return windows_name
+
+        stem, extension = windows_name.rsplit(".", 1)
+        if extension.lower() in self._image_extensions:
+            return stem
+        return windows_name
 
     def _join_image_path(self, image_prefix: str, filename: str) -> str:
         prefix = image_prefix.rstrip("/")
