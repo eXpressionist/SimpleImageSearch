@@ -115,6 +115,7 @@ class LocalFileStorage(StorageProvider):
             raise ValueError(f"Target path is not a directory: {target_dir}")
 
         safe_filename = self._normalize_filename(filename)
+        safe_filename = self._normalize_image_extension(safe_filename, mime_type)
         file_path = dir_path / safe_filename
         file_hash = hashlib.sha256(data).hexdigest()
 

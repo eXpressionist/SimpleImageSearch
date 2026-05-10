@@ -35,7 +35,7 @@ async def test_save_uses_detected_image_format_over_filename_and_content_type(tm
 
 
 @pytest.mark.asyncio
-async def test_save_to_directory_uses_flat_target_directory_and_preserves_filename_extension(tmp_path):
+async def test_save_to_directory_uses_detected_image_format_over_filename_extension(tmp_path):
     storage = LocalFileStorage(base_path=str(tmp_path / "storage"))
     data = make_image_bytes("PNG")
     target_dir = tmp_path / "exports"
@@ -47,9 +47,10 @@ async def test_save_to_directory_uses_flat_target_directory_and_preserves_filena
         content_type="image/png",
     )
 
-    assert result.file_name == "SKU-1.jpg"
+    assert result.file_name == "SKU-1.png"
     assert result.mime_type == "image/png"
-    assert (target_dir / "SKU-1.jpg").exists()
+    assert (target_dir / "SKU-1.png").exists()
+    assert not (target_dir / "SKU-1.jpg").exists()
     assert not (target_dir / "batch-1").exists()
 
 
