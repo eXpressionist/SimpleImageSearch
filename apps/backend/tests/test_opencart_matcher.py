@@ -48,6 +48,7 @@ def test_parse_files_trims_blank_lines_and_keeps_order():
         ("ABC_001.jpg", "abc001"),
         ("abc 001 main.webp", "abc001"),
         ("USW-FLEX-2.5G-8", "uswflex25g8"),
+        ("U-POE++", "upoe++"),
     ],
 )
 def test_normalize_for_match(value, expected):
@@ -175,6 +176,26 @@ def test_generate_keeps_hyphenated_numeric_skus_distinct_from_nearby_files():
     assert report.conflicts == []
     assert report.unmatched_products == []
     assert report.unused_files == ["USW-Flex-2.5G-5-1.jpeg"]
+
+
+def test_generate_keeps_plus_variants_distinct_and_matches_numbered_base_image():
+    matcher = make_matcher()
+
+    report = matcher.generate(
+        products_text="7144\tU-POE\n7145\tU-POE+\n7146\tU-POE++",
+        files_text="U-POE++.png\nU-POE+.jpg\nU-POE-2.webp",
+        image_prefix="catalog/products/",
+        settings=OpenCartMatchSettings(use_openrouter=False),
+    )
+
+    assert [(m.product_id, m.sku, m.filename, m.method.value) for m in report.matches] == [
+        (7144, "U-POE", "U-POE-2.webp", "normalized"),
+        (7145, "U-POE+", "U-POE+.jpg", "exact"),
+        (7146, "U-POE++", "U-POE++.png", "exact"),
+    ]
+    assert report.conflicts == []
+    assert report.unmatched_products == []
+    assert report.unused_files == []
 
 
 def test_generate_applies_and_validates_llm_matches():

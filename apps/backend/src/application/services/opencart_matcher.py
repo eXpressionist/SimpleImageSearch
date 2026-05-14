@@ -58,7 +58,7 @@ class OpenCartImageMatcher:
 
     def normalize_for_match(self, value: str, *, ignore_service_words: bool = True) -> str:
         stem = self._filename_stem(value)
-        parts = re.findall(r"[a-z0-9]+", stem.lower())
+        parts = re.findall(r"[a-z0-9]+|\++", stem.lower())
         if ignore_service_words:
             parts = [part for part in parts if part not in self._service_words]
         return "".join(parts)

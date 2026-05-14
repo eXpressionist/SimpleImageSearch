@@ -970,11 +970,29 @@ h2 {
 }
 
 .opencart-table {
-  min-width: 900px;
+  min-width: 1080px;
 }
 
 .opencart-table td {
   overflow-wrap: anywhere;
+}
+
+.opencart-table th:nth-child(1),
+.opencart-table td:nth-child(1) {
+  width: 84px;
+  white-space: nowrap;
+}
+
+.opencart-table th:nth-child(5),
+.opencart-table td:nth-child(5) {
+  width: 116px;
+  white-space: nowrap;
+}
+
+.opencart-table th:nth-child(6),
+.opencart-table td:nth-child(6) {
+  width: 104px;
+  white-space: nowrap;
 }
 
 .opencart-report-grid {
