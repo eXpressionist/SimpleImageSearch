@@ -39,7 +39,6 @@ class BraveSearchProvider(SearchProvider):
         logger.info("=" * 60)
         logger.info("BRAVE SEARCH START")
         logger.info(f"API Key present: {bool(self.api_key)}")
-        logger.info(f"API Key prefix: {self.api_key[:10] if self.api_key else 'NONE'}...")
         logger.info(f"Query: {config.query}")
         logger.info(f"Num requested: {config.images_per_query}")
 
@@ -200,6 +199,7 @@ class BraveSearchProvider(SearchProvider):
 
             # Also get page URL if available
             page_url = item.get("url", "")
+            thumbnail = item.get("thumbnail")
 
             results.append(SearchResult(
                 direct_url=image_url,
@@ -210,6 +210,7 @@ class BraveSearchProvider(SearchProvider):
                 height=height,
                 file_size=None,
                 position=position,
+                thumbnail_url=thumbnail.get("src") if isinstance(thumbnail, dict) else None,
             ))
 
         def get_image_size(result: SearchResult) -> int:

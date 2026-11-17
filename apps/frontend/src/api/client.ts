@@ -33,6 +33,10 @@ export const api = {
     request<T>(endpoint, { method: 'DELETE' }),
 };
 
-export function getImageUrl(itemId: string): string {
-  return `${API_BASE}/images/item/${itemId}/file`;
+export function getImageFileUrl(imageId: string): string {
+  return `${API_BASE}/images/${encodeURIComponent(imageId)}/file`;
+}
+
+export function getImagePreviewUrl(imageId: string, index: number): string {
+  return `${API_BASE}/images/${encodeURIComponent(imageId)}/preview/${index}`;
 }

@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { batchesApi } from '@/api/batches';
-import type { BatchCreateRequest, BatchStatsResponse } from '@/types/api';
+import type { BatchCreateRequest } from '@/types/api';
 import { useAsyncData, useMutation } from '@/hooks/useAsyncData';
 
 export function useBatches(page = 1, pageSize = 20, status?: string) {
@@ -9,22 +9,21 @@ export function useBatches(page = 1, pageSize = 20, status?: string) {
     [page, pageSize, status]
   );
 
-  return useAsyncData(loader, [loader]);
+  return useAsyncData(loader);
 }
 
 export function useBatch(id: string) {
   const loader = useCallback(() => batchesApi.get(id), [id]);
 
-  return useAsyncData(loader, [loader], { enabled: !!id });
+  return useAsyncData(loader, { enabled: !!id });
 }
 
 export function useBatchStats(id: string) {
   const loader = useCallback(() => batchesApi.getStats(id), [id]);
 
-  return useAsyncData(loader, [loader], {
+  return useAsyncData(loader, {
     enabled: !!id,
-    refetchInterval: (query) => {
-      const data = query as BatchStatsResponse | undefined;
+    refetchInterval: (data) => {
       const isProcessing =
         data && (data.pending > 0 || data.searching > 0 || data.downloading > 0);
       return isProcessing ? 1000 : 5000;

@@ -1,92 +1,36 @@
+import asyncio
 import hashlib
-import logging
 import os
 import re
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
+
 import aiofiles
-from PIL import Image
-import io
 
 from src.domain.interfaces import StorageProvider, StorageResult
-
-logger = logging.getLogger(__name__)
+from src.infrastructure.image_processing import inspect_image
 
 
 class LocalFileStorage(StorageProvider):
     def __init__(
-        self, 
+        self,
         base_path: str = "/data/images",
         max_file_size_bytes: int = 10 * 1024 * 1024,
     ):
         self.base_path = Path(base_path)
         self.max_file_size_bytes = max_file_size_bytes
-        self._ensure_base_path()
-    
-    def _ensure_base_path(self) -> None:
         self.base_path.mkdir(parents=True, exist_ok=True)
-    
+
     async def save(
-        self, 
-        data: bytes, 
-        batch_id: str, 
-        item_id: str, 
+        self,
+        data: bytes,
+        batch_id: str,
+        item_id: str,
         filename: str,
         content_type: Optional[str] = None,
     ) -> StorageResult:
-        logger.info("=" * 40)
-        logger.info("LOCAL STORAGE SAVE")
-        logger.info(f"Base path: {self.base_path}")
-        logger.info(f"Batch ID: {batch_id}")
-        logger.info(f"Item ID: {item_id}")
-        logger.info(f"Filename: {filename}")
-        logger.info(f"Data size: {len(data)} bytes")
-        
-        if len(data) > self.max_file_size_bytes:
-            logger.error(f"File too large: {len(data)} > {self.max_file_size_bytes}")
-            raise ValueError(f"File too large: {len(data)} bytes > {self.max_file_size_bytes}")
-        
-        if len(data) == 0:
-            logger.error("Empty file")
-            raise ValueError("Empty file")
-        
-        mime_type, width, height = self._analyze_image(data, content_type)
-        
-        dir_path = self.base_path / batch_id / item_id
-        logger.info(f"Creating directory: {dir_path}")
-        dir_path.mkdir(parents=True, exist_ok=True)
-        
-        safe_filename = self._normalize_filename(filename)
-        safe_filename = self._normalize_image_extension(safe_filename, mime_type)
-        file_path = dir_path / safe_filename
-        logger.info(f"Full file path: {file_path}")
-        
-        file_hash = hashlib.sha256(data).hexdigest()
-        logger.info(f"File hash: {file_hash[:16]}...")
-        
-        logger.info(f"Writing file...")
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(data)
-        
-        # Verify file was written
-        if file_path.exists():
-            actual_size = file_path.stat().st_size
-            logger.info(f"File written successfully, actual size: {actual_size} bytes")
-        else:
-            logger.error(f"File does not exist after write: {file_path}")
-        
-        logger.info(f"MIME: {mime_type}, Dimensions: {width}x{height}")
-        logger.info("=" * 40)
-        
-        return StorageResult(
-            file_path=str(file_path),
-            file_name=safe_filename,
-            mime_type=mime_type,
-            file_size=len(data),
-            file_hash=file_hash,
-            width=width,
-            height=height,
-        )
+        return await self._save(data, self.base_path / batch_id / item_id, filename)
 
     async def save_to_directory(
         self,
@@ -95,39 +39,32 @@ class LocalFileStorage(StorageProvider):
         filename: str,
         content_type: Optional[str] = None,
     ) -> StorageResult:
-        logger.info("=" * 40)
-        logger.info("LOCAL STORAGE FLAT SAVE")
-        logger.info(f"Target dir: {target_dir}")
-        logger.info(f"Filename: {filename}")
-        logger.info(f"Data size: {len(data)} bytes")
+        return await self._save(data, self._resolve_target_dir(target_dir), filename)
 
+    async def _save(self, data: bytes, directory: Path, filename: str) -> StorageResult:
+        if not data:
+            raise ValueError("Empty file")
         if len(data) > self.max_file_size_bytes:
             raise ValueError(f"File too large: {len(data)} bytes > {self.max_file_size_bytes}")
 
-        if len(data) == 0:
-            raise ValueError("Empty file")
-
-        mime_type, width, height = self._analyze_image(data, content_type)
-        dir_path = self._resolve_target_dir(target_dir)
-        dir_path.mkdir(parents=True, exist_ok=True)
-
-        if not dir_path.is_dir():
-            raise ValueError(f"Target path is not a directory: {target_dir}")
-
-        safe_filename = self._normalize_filename(filename)
-        safe_filename = self._normalize_image_extension(safe_filename, mime_type)
-        file_path = dir_path / safe_filename
-        file_hash = hashlib.sha256(data).hexdigest()
-
-        async with aiofiles.open(file_path, "wb") as f:
-            await f.write(data)
+        mime_type, width, height = await asyncio.to_thread(inspect_image, data)
+        safe_filename = self._normalize_image_extension(self._normalize_filename(filename), mime_type)
+        directory.mkdir(parents=True, exist_ok=True)
+        file_path = directory / safe_filename
+        temporary_path = directory / f".{uuid4().hex}.tmp"
+        try:
+            async with aiofiles.open(temporary_path, "wb") as output:
+                await output.write(data)
+            temporary_path.replace(file_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
 
         return StorageResult(
             file_path=str(file_path),
             file_name=safe_filename,
             mime_type=mime_type,
             file_size=len(data),
-            file_hash=file_hash,
+            file_hash=hashlib.sha256(data).hexdigest(),
             width=width,
             height=height,
         )
@@ -138,92 +75,49 @@ class LocalFileStorage(StorageProvider):
                 "Windows paths are not available inside this container. "
                 "Mount the host folder into Docker and use the container path, for example /exports."
             )
-
         path = Path(target_dir).expanduser()
         if not path.is_absolute():
             raise ValueError("Target directory must be an absolute path available to the backend")
-
         return path
-    
-    async def get_file_path(self, batch_id: str, item_id: str) -> Optional[str]:
-        dir_path = self.base_path / batch_id / item_id
-        if not dir_path.exists():
-            return None
-        
-        files = list(dir_path.iterdir())
-        if not files:
-            return None
-        
-        return str(files[0])
-    
-    async def delete(self, batch_id: str, item_id: str) -> bool:
-        dir_path = self.base_path / batch_id / item_id
-        if not dir_path.exists():
-            return False
-        
-        import shutil
-        shutil.rmtree(dir_path)
-        return True
-    
-    async def exists(self, file_hash: str) -> Optional[str]:
-        # TODO: Implement hash-based lookup index for deduplication
-        return None
-    
-    def _normalize_filename(self, filename: str) -> str:
-        name = filename.strip()
-        name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', name)
-        name = re.sub(r'\s+', '_', name)
-        name = name.strip('._-')
-        
-        if len(name) > 200:
-            base, ext = name.rsplit('.', 1) if '.' in name else (name, '')
-            name = base[:200 - len(ext) - 1] + ('.' + ext if ext else '')
-        
-        if not name:
-            name = "unnamed"
-        
-        return name
-    
-    def _analyze_image(self, data: bytes, content_type: Optional[str] = None) -> tuple[str, Optional[int], Optional[int]]:
-        mime_map = {
-            "jpeg": "image/jpeg",
-            "jpg": "image/jpeg",
-            "png": "image/png",
-            "gif": "image/gif",
-            "webp": "image/webp",
-            "bmp": "image/bmp",
-        }
 
-        try:
-            with Image.open(io.BytesIO(data)) as img:
-                detected_format = (img.format or "").lower()
-                mime_type = mime_map.get(detected_format, f"image/{detected_format}" if detected_format else "")
-                return mime_type or "application/octet-stream", img.width, img.height
-        except Exception as e:
-            logger.debug(f"Could not analyze image bytes: {e}")
-        
-        if content_type and content_type.startswith("image/"):
-            return content_type, None, None
-        
-        return "application/octet-stream", None, None
-    
+    async def get_file_path(self, batch_id: str, item_id: str) -> Optional[str]:
+        directory = self.base_path / batch_id / item_id
+        if directory.is_dir():
+            return next((str(path) for path in directory.iterdir() if path.is_file() and path.suffix != ".tmp"), None)
+        return None
+
+    async def delete(self, batch_id: str, item_id: str) -> bool:
+        directory = self.base_path / batch_id / item_id
+        if not directory.exists():
+            return False
+        import shutil
+        await asyncio.to_thread(shutil.rmtree, directory)
+        return True
+
+    async def exists(self, file_hash: str) -> Optional[str]:
+        # Hash-based deduplication is not implemented.
+        return None
+
+    def _normalize_filename(self, filename: str) -> str:
+        name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', '_', filename.strip())
+        name = re.sub(r'\s+', '_', name).strip('._-')
+        if len(name.encode("utf-8")) > 200:
+            base, ext = name.rsplit('.', 1) if '.' in name else (name, '')
+            suffix = f".{ext}" if ext else ''
+            suffix = suffix.encode("utf-8")[:20].decode("utf-8", errors="ignore")
+            base = base.encode("utf-8")[:200 - len(suffix.encode("utf-8"))].decode("utf-8", errors="ignore")
+            name = base + suffix
+        return name or "unnamed"
+
     def get_extension_from_mime(self, mime_type: str) -> str:
-        mime_to_ext = {
-            "image/jpeg": ".jpg",
-            "image/png": ".png",
-            "image/gif": ".gif",
-            "image/webp": ".webp",
-            "image/bmp": ".bmp",
-        }
-        return mime_to_ext.get(mime_type, ".bin")
+        return {
+            "image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif",
+            "image/webp": ".webp", "image/bmp": ".bmp", "image/avif": ".avif",
+        }.get(mime_type, ".bin")
 
     def _normalize_image_extension(self, filename: str, mime_type: str) -> str:
-        ext = self.get_extension_from_mime(mime_type)
-        if ext == ".bin":
-            return filename
-
+        extension = self.get_extension_from_mime(mime_type)
         path = Path(filename)
-        if path.suffix.lower() == ext:
+        if extension == ".bin" or path.suffix.lower() == extension:
             return filename
-
-        return f"{path.stem}{ext}"
+        return f"{path.stem}{extension}"

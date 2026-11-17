@@ -1,7 +1,10 @@
-import type { ThumbnailInfo } from '@/types/api';
+import { ResilientImage } from '@/components/common/ResilientImage';
+import { getPreviewSources } from '@/utils/images';
+import type { ImageResponse, ThumbnailInfo } from '@/types/api';
 
 interface ThumbnailsGalleryProps {
   thumbnails: ThumbnailInfo[];
+  image?: ImageResponse;
   selectedIndex: number | null;
   onSelect?: (index: number) => void;
   onOpenOriginal?: (thumbnail: ThumbnailInfo) => void;
@@ -9,6 +12,7 @@ interface ThumbnailsGalleryProps {
 
 export function ThumbnailsGallery({
   thumbnails,
+  image,
   selectedIndex,
   onSelect,
   onOpenOriginal,
@@ -30,7 +34,10 @@ export function ThumbnailsGallery({
             onClick={() => onSelect?.(index)}
           >
             <span className="thumbnail-choice__image">
-              <img src={thumb.url} alt={thumb.title || `Thumbnail ${index + 1}`} loading="lazy" />
+              <ResilientImage
+                sources={image ? getPreviewSources(image, thumb) : [thumb.thumbnail_url || '', thumb.url]}
+                alt={thumb.title || `Thumbnail ${index + 1}`}
+              />
               {selectedIndex === index && <span className="selected-mark">✓</span>}
               <span className="thumbnail-choice__meta">
                 <span>{thumb.width}x{thumb.height}</span>
@@ -69,17 +76,4 @@ export function ThumbnailsGallery({
   );
 }
 
-export function parseThumbnails(imageDirectUrl: string | null): ThumbnailInfo[] {
-  if (!imageDirectUrl) return [];
-
-  try {
-    const parsed = JSON.parse(imageDirectUrl);
-    if (Array.isArray(parsed)) {
-      return parsed as ThumbnailInfo[];
-    }
-  } catch (error) {
-    console.error('Failed to parse thumbnails:', error);
-  }
-
-  return [];
-}
+export { parseThumbnails } from '@/utils/images';

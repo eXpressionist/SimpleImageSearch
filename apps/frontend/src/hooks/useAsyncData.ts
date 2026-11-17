@@ -14,7 +14,6 @@ interface AsyncDataState<T> {
 
 export function useAsyncData<T>(
   loader: () => Promise<T>,
-  dependencies: readonly unknown[],
   options: AsyncDataOptions<T> = {}
 ): AsyncDataState<T> {
   const { enabled = true, refetchInterval = false } = options;
@@ -23,32 +22,39 @@ export function useAsyncData<T>(
   const [error, setError] = useState<Error | null>(null);
   const requestId = useRef(0);
   const dataRef = useRef<T>();
+  const inFlight = useRef<{ loader: () => Promise<T>; promise: Promise<T | undefined> } | null>(null);
 
   const refetch = useCallback(async () => {
     if (!enabled) return undefined;
+    if (inFlight.current?.loader === loader) return inFlight.current.promise;
 
     const currentRequest = requestId.current + 1;
     requestId.current = currentRequest;
     setIsLoading(true);
     setError(null);
 
-    try {
-      const result = await loader();
-      if (requestId.current === currentRequest) {
-        dataRef.current = result;
-        setData(result);
+    const promise = (async () => {
+      try {
+        const result = await Promise.resolve().then(loader);
+        if (requestId.current === currentRequest) {
+          dataRef.current = result;
+          setData(result);
+        }
+        return result;
+      } catch (err) {
+        if (requestId.current === currentRequest) {
+          setError(err instanceof Error ? err : new Error('Request failed'));
+        }
+        return undefined;
+      } finally {
+        if (requestId.current === currentRequest) {
+          setIsLoading(false);
+          inFlight.current = null;
+        }
       }
-      return result;
-    } catch (err) {
-      if (requestId.current === currentRequest) {
-        setError(err instanceof Error ? err : new Error('Request failed'));
-      }
-      return undefined;
-    } finally {
-      if (requestId.current === currentRequest) {
-        setIsLoading(false);
-      }
-    }
+    })();
+    inFlight.current = { loader, promise };
+    return promise;
   }, [enabled, loader]);
 
   useEffect(() => {
@@ -57,7 +63,11 @@ export function useAsyncData<T>(
     setError(null);
     setIsLoading(enabled);
     void refetch();
-  }, dependencies);
+    return () => {
+      requestId.current += 1;
+      inFlight.current = null;
+    };
+  }, [enabled, refetch]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -109,7 +119,7 @@ export function useMutation<TArgs extends unknown[], TResult>(
 
   const mutate = useCallback(
     (...args: TArgs) => {
-      void mutateAsync(...args);
+      void mutateAsync(...args).catch(() => undefined);
     },
     [mutateAsync]
   );

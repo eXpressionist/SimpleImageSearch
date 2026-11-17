@@ -9,6 +9,7 @@ A production-ready application for batch image search and download via Google Cu
 - Concurrent image download with retry logic
 - Real-time progress tracking
 - Gallery and table view modes
+- Search-provider thumbnails with cached backend previews and fallback sources
 - File deduplication by hash
 - SSRF protection
 
@@ -33,6 +34,19 @@ A production-ready application for batch image search and download via Google Cu
 2. **StorageProvider Interface** - Abstraction for file storage (local/S3)
 3. **BackgroundTasks** - Simple async processing for MVP (migratable to Celery)
 4. **Polling** - Frontend polls for status updates (5s interval)
+
+### Image previews
+
+Search results keep original and thumbnail URLs separately. The browser tries the
+provider thumbnail first, then `/api/images/{image_id}/preview/{index}`, then the
+original URL. Existing batches without thumbnail URLs use the same preview endpoint
+without a database migration. Original download links still point to full-size files.
+
+The backend validates each remote destination and redirect, limits response size,
+checks image bytes, and caches PNG previews up to 512×512 under
+`STORAGE_PATH/previews`. Concurrent requests for the same preview share one download.
+Cached previews are generated data; they can be removed when the application is
+stopped and are recreated on demand. An unavailable source shows a placeholder.
 
 ## Quick Start
 

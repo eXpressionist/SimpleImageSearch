@@ -1,24 +1,8 @@
 import { StatusBadge } from '@/components/common/StatusBadge';
 import { CopyableText } from '@/components/common/CopyableText';
-import type { ItemWithImageResponse, ThumbnailInfo } from '@/types/api';
-
-function getThumbnails(item: ItemWithImageResponse): ThumbnailInfo[] {
-  if (!item.image?.direct_url) return [];
-  try {
-    return JSON.parse(item.image.direct_url) as ThumbnailInfo[];
-  } catch {
-    return [];
-  }
-}
-
-function formatFileSize(bytes: number | null): string {
-  if (!bytes) return '-';
-  return `${Math.round(bytes / 1024)} KB`;
-}
-
-function formatMime(mime: string): string {
-  return mime.split('/')[1]?.toUpperCase() || mime;
-}
+import { ThumbnailCard } from '@/components/item/ThumbnailCard';
+import { getThumbnails } from '@/utils/images';
+import type { ItemWithImageResponse } from '@/types/api';
 
 interface ItemTableProps {
   items: ItemWithImageResponse[];
@@ -33,12 +17,13 @@ export function ItemTable({ items }: ItemTableProps) {
             <th>#</th>
             <th>Query</th>
             <th>Status</th>
-            <th>Thumbnails (10)</th>
+            <th>Thumbnails</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item) => {
-            const thumbnails = getThumbnails(item);
+            const image = item.image;
+            const thumbnails = getThumbnails(image);
             return (
               <tr key={item.id}>
                 <td>{item.position + 1}</td>
@@ -52,21 +37,8 @@ export function ItemTable({ items }: ItemTableProps) {
                 <td>
                   {thumbnails.length > 0 ? (
                     <div className="thumb-strip">
-                      {thumbnails.map((thumb, index) => (
-                        <a
-                          key={`${thumb.url}-${index}`}
-                          className="thumb-card"
-                          href={thumb.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <img src={thumb.url} alt={thumb.title || `Thumb ${index + 1}`} loading="lazy" />
-                          <span className="thumb-card__top">{thumb.width}x{thumb.height}</span>
-                          <span className="thumb-card__bottom">
-                            <span>{formatFileSize(thumb.file_size)}</span>
-                            <span>{formatMime(thumb.mime_type)}</span>
-                          </span>
-                        </a>
+                      {image && thumbnails.map((thumb) => (
+                        <ThumbnailCard key={thumb.position} image={image} thumbnail={thumb} />
                       ))}
                     </div>
                   ) : (

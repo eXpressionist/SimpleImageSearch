@@ -79,6 +79,7 @@ export interface BatchOriginalDownloadProgress {
 export interface ThumbnailInfo {
   position: number;
   url: string;
+  thumbnail_url?: string | null;
   source_url: string;
   title: string;
   mime_type: string;

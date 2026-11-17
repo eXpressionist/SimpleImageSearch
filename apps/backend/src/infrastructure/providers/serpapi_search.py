@@ -110,6 +110,7 @@ class SerpApiSearchProvider(SearchProvider):
                 height=item.get("height"),
                 file_size=item.get("size"),
                 position=position,
+                thumbnail_url=item.get("thumbnail"),
             ))
         
         if not results:

@@ -1,6 +1,8 @@
 import asyncio
+import ipaddress
 import logging
 import re
+import socket
 from typing import Optional
 from urllib.parse import urlparse
 import httpx
@@ -9,46 +11,12 @@ from src.domain.entities import ImageAsset
 from src.domain.interfaces import StorageResult
 from src.infrastructure.providers import LocalFileStorage
 from src.infrastructure.config import Settings
+from src.infrastructure.image_processing import inspect_image
 
 logger = logging.getLogger(__name__)
 
 
 class ImageDownloader:
-    ALLOWED_CONTENT_TYPES = {
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "image/bmp",
-    }
-    
-    BLOCKED_IP_RANGES = [
-        "10.",
-        "127.",
-        "169.254.",
-        "172.16.",
-        "172.17.",
-        "172.18.",
-        "172.19.",
-        "172.20.",
-        "172.21.",
-        "172.22.",
-        "172.23.",
-        "172.24.",
-        "172.25.",
-        "172.26.",
-        "172.27.",
-        "172.28.",
-        "172.29.",
-        "172.30.",
-        "172.31.",
-        "192.168.",
-        "0.0.0.0",
-        "::1",
-        "fc00:",
-        "fe80:",
-    ]
-    
     def __init__(self, storage: LocalFileStorage, settings: Settings):
         self.storage = storage
         self.settings = settings
@@ -60,35 +28,8 @@ class ImageDownloader:
         item_id: str,
         original_query: str,
     ) -> ImageAsset:
-        logger.info("=" * 60)
-        logger.info("DOWNLOAD AND SAVE START")
-        logger.info(f"URL: {url}")
-        logger.info(f"Batch ID: {batch_id}")
-        logger.info(f"Item ID: {item_id}")
-        logger.info(f"Query: {original_query}")
-        
-        try:
-            self._validate_url(url)
-            logger.info("URL validation passed")
-        except Exception as e:
-            logger.error(f"URL validation failed: {e}")
-            raise
-        
-        logger.info("Starting download...")
-        data, content_type = await self._download_with_retry(url)
-        logger.info(f"Downloaded {len(data)} bytes, content-type: {content_type}")
-        
-        try:
-            self._validate_content(data, content_type)
-            logger.info("Content validation passed")
-        except Exception as e:
-            logger.error(f"Content validation failed: {e}")
-            raise
-        
+        data, content_type = await self.fetch_image(url)
         filename = self._generate_filename(url, original_query, content_type)
-        logger.info(f"Generated filename: {filename}")
-        
-        logger.info("Saving to storage...")
         storage_result = await self.storage.save(
             data=data,
             batch_id=batch_id,
@@ -96,8 +37,6 @@ class ImageDownloader:
             filename=filename,
             content_type=content_type,
         )
-        logger.info(f"Saved to: {storage_result.file_path}")
-        logger.info("=" * 60)
         
         return self._create_image_asset(
             storage_result=storage_result,
@@ -111,9 +50,7 @@ class ImageDownloader:
         target_dir: str,
         filename: str,
     ) -> StorageResult:
-        self._validate_url(url)
-        data, content_type = await self._download_with_retry(url)
-        self._validate_content(data, content_type)
+        data, content_type = await self.fetch_image(url)
 
         return await self.storage.save_to_directory(
             data=data,
@@ -121,6 +58,13 @@ class ImageDownloader:
             filename=filename,
             content_type=content_type,
         )
+
+    async def fetch_image(self, url: str) -> tuple[bytes, str]:
+        self._validate_url(url)
+        data, content_type = await self._download_with_retry(url)
+        self._validate_content(data, content_type)
+        mime_type, _, _ = await asyncio.to_thread(inspect_image, data)
+        return data, mime_type
     
     def _validate_url(self, url: str) -> None:
         if not url:
@@ -135,35 +79,55 @@ class ImageDownloader:
         if not hostname:
             raise ValueError("No hostname in URL")
         
-        hostname_lower = hostname.lower()
+        if parsed.username is not None or parsed.password is not None:
+            raise ValueError("Credentials in image URLs are not allowed")
+        hostname_lower = hostname.lower().rstrip(".")
+
+        def matches_domain(domain: str) -> bool:
+            domain = domain.lower().strip(".")
+            return hostname_lower == domain or hostname_lower.endswith(f".{domain}")
         
         # Check blocked domains
         if self.settings.blocked_domains_list:
             for blocked in self.settings.blocked_domains_list:
-                if blocked.lower() in hostname_lower:
+                if matches_domain(blocked):
                     raise ValueError(f"Blocked domain: {hostname}")
         
         # Check allowed domains (if whitelist is set)
         if self.settings.allowed_domains_list:
             allowed = False
             for allowed_domain in self.settings.allowed_domains_list:
-                if allowed_domain.lower() in hostname_lower:
+                if matches_domain(allowed_domain):
                     allowed = True
                     break
             if not allowed:
                 raise ValueError(f"Domain not in whitelist: {hostname}")
         
-        # SSRF protection
-        for blocked_range in self.BLOCKED_IP_RANGES:
-            if hostname_lower.startswith(blocked_range.lower()):
-                raise ValueError(f"SSRF attempt blocked: {hostname}")
+        if hostname_lower == "localhost" or hostname_lower.endswith(".localhost"):
+            raise ValueError(f"SSRF attempt blocked: {hostname}")
+        try:
+            address = ipaddress.ip_address(hostname_lower)
+        except ValueError:
+            return
+        if not address.is_global:
+            raise ValueError(f"SSRF attempt blocked: {hostname}")
+
+    async def _resolve_public_host(self, url: str) -> str:
+        parsed = urlparse(url)
+        addresses = await asyncio.get_running_loop().getaddrinfo(
+            parsed.hostname, parsed.port or (443 if parsed.scheme == "https" else 80),
+            type=socket.SOCK_STREAM,
+        )
+        if not addresses or any(not ipaddress.ip_address(info[4][0]).is_global for info in addresses):
+            raise ValueError(f"SSRF attempt blocked: {parsed.hostname}")
+        return addresses[0][4][0]
     
     async def _download_with_retry(self, url: str) -> tuple[bytes, str]:
         last_error: Optional[Exception] = None
         
         for attempt in range(self.settings.max_retries):
             try:
-                return await self._download(url)
+                return await asyncio.wait_for(self._download(url), timeout=self.settings.download_timeout)
             except Exception as e:
                 last_error = e
                 logger.warning(f"Download attempt {attempt + 1} failed: {e}")
@@ -180,10 +144,10 @@ class ImageDownloader:
     def _is_non_retryable_download_error(self, error: Exception) -> bool:
         match = re.fullmatch(r"HTTP (\d{3})", str(error))
         if not match:
-            return False
+            return isinstance(error, ValueError)
 
         status_code = int(match.group(1))
-        return 400 <= status_code < 500
+        return 400 <= status_code < 500 and status_code not in {408, 429}
     
     async def _download(self, url: str) -> tuple[bytes, str]:
         headers = {
@@ -193,24 +157,41 @@ class ImageDownloader:
         
         async with httpx.AsyncClient(
             timeout=self.settings.download_timeout,
-            follow_redirects=True,
-            max_redirects=5,
+            follow_redirects=False,
+            trust_env=False,
+            limits=httpx.Limits(max_keepalive_connections=0),
         ) as client:
-            response = await client.get(url, headers=headers)
-            
-            if response.status_code != 200:
-                raise ValueError(f"HTTP {response.status_code}")
-            
-            content_type = response.headers.get("content-type", "").split(";")[0].strip()
-            
-            data = response.content
-            
-            # Follow redirect manually to validate final URL
-            if response.history:
-                final_url = str(response.url)
-                self._validate_url(final_url)
-            
-            return data, content_type
+            for redirect in range(6):
+                self._validate_url(url)
+                address = await self._resolve_public_host(url)
+                original_url = httpx.URL(url)
+                # Pin the checked IP so DNS rebinding cannot change the connection target.
+                request_url = original_url.copy_with(host=address)
+                request_headers = {**headers, "Host": original_url.netloc.decode("ascii")}
+                client.cookies.clear()
+                async with client.stream(
+                    "GET", request_url, headers=request_headers,
+                    extensions={"sni_hostname": original_url.host},
+                ) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location or redirect == 5:
+                            raise ValueError("Invalid or excessive image redirects")
+                        url = str(original_url.join(location))
+                        continue
+                    if response.status_code != 200:
+                        raise ValueError(f"HTTP {response.status_code}")
+                    length = response.headers.get("content-length", "")
+                    if length.isdigit() and int(length) > self.settings.max_file_size_bytes:
+                        raise ValueError("File too large")
+                    data = bytearray()
+                    async for chunk in response.aiter_bytes(chunk_size=64 * 1024):
+                        data.extend(chunk)
+                        if len(data) > self.settings.max_file_size_bytes:
+                            raise ValueError("File too large")
+                    content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
+                    return bytes(data), content_type
+        raise ValueError("Download failed")
     
     def _validate_content(self, data: bytes, content_type: str) -> None:
         if len(data) == 0:
@@ -219,10 +200,6 @@ class ImageDownloader:
         if len(data) > self.settings.max_file_size_bytes:
             raise ValueError(f"File too large: {len(data)} bytes")
         
-        # Check content type
-        if content_type and content_type not in self.ALLOWED_CONTENT_TYPES:
-            # Some servers return wrong content type, check actual content
-            pass
     
     def _generate_filename(self, url: str, query: str, content_type: str) -> str:
         # Use normalized query as filename (option A from requirements)

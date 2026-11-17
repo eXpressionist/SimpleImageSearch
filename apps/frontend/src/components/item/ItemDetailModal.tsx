@@ -1,4 +1,5 @@
-import { getImageUrl } from '@/api/client';
+import { ResilientImage } from '@/components/common/ResilientImage';
+import { getPreviewSources, getThumbnails } from '@/utils/images';
 import { StatusBadge } from '@/components/common/StatusBadge';
 import type { ItemWithImageResponse } from '@/types/api';
 
@@ -11,6 +12,7 @@ interface ItemDetailModalProps {
 
 export function ItemDetailModal({ item, open, onClose, onRetry }: ItemDetailModalProps) {
   if (!open || !item) return null;
+  const thumbnail = getThumbnails(item.image)[0];
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
@@ -27,8 +29,8 @@ export function ItemDetailModal({ item, open, onClose, onRetry }: ItemDetailModa
 
         <div className="modal__body item-detail-grid">
           <div>
-            {item.image ? (
-              <img className="detail-image" src={getImageUrl(item.id)} alt={item.image.file_name} />
+            {item.image && thumbnail ? (
+              <ResilientImage className="detail-image" sources={getPreviewSources(item.image, thumbnail)} alt={thumbnail.title || item.image.file_name} loading="eager" />
             ) : (
               <div className="image-placeholder image-placeholder--large">No image</div>
             )}
@@ -48,7 +50,7 @@ export function ItemDetailModal({ item, open, onClose, onRetry }: ItemDetailModa
               </>
             )}
 
-            {item.image && (
+            {item.image && item.image.mime_type !== 'application/json' && (
               <>
                 <dt>File Info</dt>
                 <dd>
@@ -67,8 +69,8 @@ export function ItemDetailModal({ item, open, onClose, onRetry }: ItemDetailModa
         </div>
 
         <footer className="modal__actions">
-          {item.image && (
-            <a className="button button--ghost" href={item.image.direct_url} target="_blank" rel="noopener noreferrer">
+          {thumbnail && (
+            <a className="button button--ghost" href={thumbnail.url} target="_blank" rel="noopener noreferrer">
               Open Original
             </a>
           )}

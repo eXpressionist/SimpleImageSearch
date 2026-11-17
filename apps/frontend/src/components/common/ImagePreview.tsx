@@ -1,14 +1,15 @@
-import { getImageUrl } from '@/api/client';
+import { ResilientImage } from '@/components/common/ResilientImage';
+import { formatFileSize, getPreviewSources, getThumbnails } from '@/utils/images';
 import type { ImageResponse } from '@/types/api';
 
 interface ImagePreviewProps {
   image: ImageResponse | null;
-  itemId: string;
   height?: number;
 }
 
-export function ImagePreview({ image, itemId, height = 150 }: ImagePreviewProps) {
-  if (!image) {
+export function ImagePreview({ image, height = 150 }: ImagePreviewProps) {
+  const thumbnail = getThumbnails(image)[0];
+  if (!image || !thumbnail) {
     return (
       <div className="image-placeholder" style={{ height }}>
         No image
@@ -18,19 +19,13 @@ export function ImagePreview({ image, itemId, height = 150 }: ImagePreviewProps)
 
   return (
     <div className="image-preview">
-      <img
-        src={getImageUrl(itemId)}
-        alt={image.file_name}
+      <ResilientImage
+        sources={getPreviewSources(image, thumbnail)}
+        alt={thumbnail.title || image.file_name}
         style={{ height }}
         loading="lazy"
       />
-      <span className="image-preview__meta">{formatSize(image.file_size)}</span>
+      <span className="image-preview__meta">{formatFileSize(thumbnail.file_size)}</span>
     </div>
   );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }

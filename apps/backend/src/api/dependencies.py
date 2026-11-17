@@ -1,4 +1,5 @@
 from typing import AsyncGenerator, Union
+from functools import lru_cache
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +7,7 @@ from src.infrastructure.database import async_session_factory
 from src.infrastructure.providers import GoogleCustomSearchProvider, BraveSearchProvider, SerpApiSearchProvider, LocalFileStorage
 from src.infrastructure.config import get_settings
 from src.application.services import BatchProcessor, FileStorageService
+from src.application.services.image_preview import ImagePreviewService
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
@@ -70,3 +72,8 @@ def get_batch_processor(
 
 def get_file_service() -> FileStorageService:
     return FileStorageService()
+
+
+@lru_cache
+def get_image_preview_service() -> ImagePreviewService:
+    return ImagePreviewService(get_storage(), get_settings())

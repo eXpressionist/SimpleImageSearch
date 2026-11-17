@@ -29,14 +29,14 @@ export function BatchDetailPage() {
 
   const { data: batch, isLoading: batchLoading } = useBatch(id || '');
   const { data: stats, refetch: refetchStats } = useBatchStats(id || '');
+  const isProcessing = !!stats && (stats.pending > 0 || stats.searching > 0 || stats.downloading > 0);
   const {
     data: itemsData,
     isLoading: itemsLoading,
     error: itemsError,
     refetch: refetchItems,
-  } = useBatchItems(id || '', page + 1, rowsPerPage, status || undefined);
+  } = useBatchItems(id || '', page + 1, rowsPerPage, status || undefined, isProcessing);
 
-  const isProcessing = stats && (stats.pending > 0 || stats.searching > 0 || stats.downloading > 0);
   const hasStuckItems = stats && (stats.searching > 0 || stats.downloading > 0);
   const totalPages = itemsData ? Math.max(1, Math.ceil(itemsData.total / rowsPerPage)) : 1;
 

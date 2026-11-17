@@ -30,8 +30,6 @@ class GoogleCustomSearchProvider(SearchProvider):
             logger.error("Google API key or CX not configured", extra={
                 "api_key_set": bool(self.api_key),
                 "cx_set": bool(self.cx),
-                "api_key_prefix": self.api_key[:10] if self.api_key else None,
-                "cx_value": self.cx[:20] if self.cx else None,
             })
             return []
         
@@ -133,6 +131,7 @@ class GoogleCustomSearchProvider(SearchProvider):
                 height=image_info.get("height"),
                 file_size=None,
                 position=position,
+                thumbnail_url=image_info.get("thumbnailLink"),
             ))
         
         return results

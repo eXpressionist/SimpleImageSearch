@@ -55,6 +55,24 @@ async def test_save_to_directory_uses_detected_image_format_over_filename_extens
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("data", [b"<html>Access denied</html>", b"\x89PNG\r\n\x1a\ntruncated"])
+async def test_save_rejects_non_images_even_with_an_image_content_type(tmp_path, data):
+    storage = LocalFileStorage(base_path=str(tmp_path))
+    with pytest.raises(ValueError, match="Invalid or corrupted image"):
+        await storage.save(data, "batch", "item", "image.jpg", "image/jpeg")
+    assert not list(tmp_path.rglob("*.jpg"))
+    assert not list(tmp_path.rglob("*.tmp"))
+
+
+@pytest.mark.asyncio
+async def test_save_limits_unicode_filenames_by_bytes_for_linux_filesystems(tmp_path):
+    storage = LocalFileStorage(base_path=str(tmp_path))
+    result = await storage.save(make_image_bytes("PNG"), "batch", "item", "Изображение" * 30 + ".png")
+    assert len(result.file_name.encode("utf-8")) <= 200
+    assert result.file_name.endswith(".png")
+
+
+@pytest.mark.asyncio
 async def test_save_to_directory_rejects_windows_path_inside_linux_container(tmp_path):
     if os.name == "nt":
         pytest.skip("Windows paths are valid on Windows hosts")

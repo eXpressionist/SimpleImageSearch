@@ -148,6 +148,25 @@ def make_search_result(url: str, source_url: str = "https://example.test/page") 
 
 
 @pytest.mark.asyncio
+async def test_process_item_preserves_provider_preview_without_probing_originals():
+    batch = Batch(id=uuid4(), name="previews", total_items=1)
+    item = BatchItem(id=uuid4(), batch_id=batch.id, position=0, original_query="product", normalized_query="product")
+    processor = make_processor(batch, item)
+    result = make_search_result("https://example.test/original.jpg")
+    result.thumbnail_url = "https://example.test/thumbnail.jpg"
+    processor.search_provider = FakeSearchProvider([result])
+
+    await processor._process_item(batch.id, item.id)
+
+    assert processor.item_repo.item.status == ItemStatus.SAVED
+    asset = processor.image_repo.created[0]
+    payload = json.loads(asset.direct_url)
+    assert payload[0]["url"] == result.direct_url
+    assert payload[0]["thumbnail_url"] == result.thumbnail_url
+    assert payload[0]["file_size"] is None
+
+
+@pytest.mark.asyncio
 async def test_process_item_marks_existing_image_item_saved_without_duplicate_insert():
     batch_id = uuid4()
     item_id = uuid4()

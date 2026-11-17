@@ -2,11 +2,10 @@ import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import List, Dict, Optional, Union, Any
+from typing import List, Dict, Optional, Any
 from uuid import uuid4, UUID
 from collections import OrderedDict
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.entities import Batch, BatchItem, ProcessingLog, ImageAsset
@@ -21,30 +20,6 @@ from src.infrastructure.config import get_settings
 from .image_downloader import ImageDownloader
 
 logger = logging.getLogger(__name__)
-
-
-async def get_file_size_from_url(url: str) -> int | None:
-    """Get file size from URL using HEAD request."""
-    try:
-        async with httpx.AsyncClient(timeout=5.0, follow_redirects=True) as client:
-            response = await client.head(url)
-            content_length = response.headers.get("content-length")
-            if content_length:
-                return int(content_length)
-    except Exception as e:
-        logger.debug(f"Failed to get file size for {url[:50]}...: {e}")
-    return None
-
-
-async def get_file_size_safe(url: str) -> int | None:
-    """Get file size without blocking - returns None on any error."""
-    try:
-        return await asyncio.wait_for(get_file_size_from_url(url), timeout=6.0)
-    except asyncio.TimeoutError:
-        logger.debug(f"Timeout getting file size for {url[:50]}...")
-    except Exception as e:
-        logger.debug(f"Error getting file size: {e}")
-    return None
 
 
 async def process_batch_background(batch_id: UUID) -> None:
@@ -234,40 +209,32 @@ class BatchProcessor:
                 return
 
             thumbnails_data = []
-            max_file_size_checks = 30
             for idx, result in enumerate(results):
-                file_size = result.file_size
-                if idx < max_file_size_checks:
-                    try:
-                        size = await get_file_size_safe(result.direct_url)
-                        if size is not None:
-                            file_size = size
-                    except Exception as e:
-                        logger.debug(f"Skipping file size check for thumbnail {idx}: {e}")
-
                 thumbnail_info = {
                     "position": idx,
                     "url": result.direct_url,
+                    "thumbnail_url": result.thumbnail_url,
                     "source_url": result.source_url,
                     "title": result.title,
                     "mime_type": result.mime_type or "image/jpeg",
                     "width": result.width,
                     "height": result.height,
-                    "file_size": file_size,
+                    "file_size": result.file_size,
                 }
                 thumbnails_data.append(thumbnail_info)
             
             logger.info(f"Collected {len(thumbnails_data)} thumbnails")
 
+            payload = json.dumps(thumbnails_data)
             image_asset = ImageAsset(
                 id=uuid4(),
                 item_id=item_id,
                 source_url=thumbnails_data[0]["source_url"] if thumbnails_data else "",
-                direct_url=json.dumps(thumbnails_data),
+                direct_url=payload,
                 file_path="",
                 file_name=f"thumbnails_{item_id}.json",
                 mime_type="application/json",
-                file_size=len(json.dumps(thumbnails_data)),
+                file_size=len(payload.encode("utf-8")),
                 file_hash="",
                 width=None,
                 height=None,

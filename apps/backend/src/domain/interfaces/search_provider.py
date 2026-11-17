@@ -27,6 +27,7 @@ class SearchResult:
     height: int | None = None
     file_size: int | None = None
     position: int = 0
+    thumbnail_url: str | None = None
 
 
 class SearchProvider(Protocol):
